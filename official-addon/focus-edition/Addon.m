@@ -527,7 +527,7 @@ static BOOL Signature(Class cls,NSString *name,NSUInteger argc,const char *retur
 }
 #import "HostCompatibility.h"
 static BOOL VersionMatches(void) {
-    if(![NSBundle.mainBundle.bundleIdentifier isEqual:TargetBundle])return NO;
+    if(![NSBundle.mainBundle.bundleIdentifier isEqual:TargetBundle]&&![NSBundle.mainBundle.bundleIdentifier hasPrefix:TargetBundle])return NO;
     const struct mach_header *h=NULL;
     const char *executable=NSBundle.mainBundle.executablePath.fileSystemRepresentation;
     for(uint32_t i=0;i<_dyld_image_count();i++){const char *name=_dyld_get_image_name(i);if(name&&executable&&strcmp(name,executable)==0){h=_dyld_get_image_header(i);break;}}
@@ -545,7 +545,7 @@ __attribute__((constructor)) static void Load(void) {
     // the remote loader lock. All setup runs on main after scheduling via C API.
     dispatch_async(dispatch_get_main_queue(),^{
         @autoreleasepool {
-            if(![NSBundle.mainBundle.bundleIdentifier isEqual:TargetBundle])return;
+            if(![NSBundle.mainBundle.bundleIdentifier isEqual:TargetBundle]&&![NSBundle.mainBundle.bundleIdentifier hasPrefix:TargetBundle])return;
             TIOStartExperimentalOTAFeedIfMarked();
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW,5*NSEC_PER_SEC),dispatch_get_main_queue(),^{TIOCaptionRunFixedProbeIfRequested();TWReaderProbeIfRequested();});
             Prefs=[[NSUserDefaults alloc]initWithSuiteName:Domain];
