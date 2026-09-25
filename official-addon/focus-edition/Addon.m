@@ -546,6 +546,9 @@ __attribute__((constructor)) static void Load(void) {
     dispatch_async(dispatch_get_main_queue(),^{
         @autoreleasepool {
             if(![NSBundle.mainBundle.bundleIdentifier isEqual:TargetBundle]&&![NSBundle.mainBundle.bundleIdentifier hasPrefix:TargetBundle])return;
+            // Front-load the research entry so it appears even if later init fails.
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW,1*NSEC_PER_SEC),dispatch_get_main_queue(),^{@try{AddEntry();}@catch(NSException *e){}});
+            @try {
             TIOStartExperimentalOTAFeedIfMarked();
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW,5*NSEC_PER_SEC),dispatch_get_main_queue(),^{TIOCaptionRunFixedProbeIfRequested();TWReaderProbeIfRequested();});
             Prefs=[[NSUserDefaults alloc]initWithSuiteName:Domain];
@@ -596,6 +599,7 @@ __attribute__((constructor)) static void Load(void) {
             [NSNotificationCenter.defaultCenter addObserverForName:UIApplicationDidBecomeActiveNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *n){AddEntry();}];
             [NSNotificationCenter.defaultCenter addObserverForName:@"TIOResearchClosed" object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *n){AddEntry();}];
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW,2*NSEC_PER_SEC),dispatch_get_main_queue(),^{AddEntry();});
+            } @catch(NSException *e) { }
         }
     });
 }
