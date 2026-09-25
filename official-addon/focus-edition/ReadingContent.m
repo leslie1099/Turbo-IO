@@ -3,18 +3,18 @@
 #include <zlib.h>
 static uint16_t U16(const uint8_t *p){return p[0]|(uint16_t)p[1]<<8;}
 static NSData *Clip(NSString *s,NSUInteger max){NSMutableData *d=[NSMutableData new];[s enumerateSubstringsInRange:NSMakeRange(0,s.length) options:NSStringEnumerationByComposedCharacterSequences usingBlock:^(NSString *c,NSRange a,NSRange b,BOOL *stop){NSData *v=[c dataUsingEncoding:NSUTF8StringEncoding];if(d.length+v.length>max){*stop=YES;return;}[d appendData:v];}];return d;}
-NSArray<NSString *> *TWReadingLines(NSString *text){if(![text isKindOfClass:NSString.class]||text.length>4*1024*1024)return nil;
+NSArray<NSString *> *TWReadingLines(NSString *text){if(![text isKindOfClass:NSString.class]||text.length>16*1024*1024)return nil;
  NSMutableArray *rows=[NSMutableArray new];__block NSMutableString *line=[NSMutableString new];__block unsigned cells=0;
  [text enumerateSubstringsInRange:NSMakeRange(0,text.length) options:NSStringEnumerationByComposedCharacterSequences usingBlock:^(NSString *c,NSRange a,NSRange b,BOOL *stop){
-  if(rows.count>=100000){*stop=YES;return;}
+  if(rows.count>=200000){*stop=YES;return;}
   if([c rangeOfCharacterFromSet:NSCharacterSet.newlineCharacterSet].location!=NSNotFound){[rows addObject:[line copy]];[line setString:@""];cells=0;return;}
   if([c rangeOfCharacterFromSet:NSCharacterSet.controlCharacterSet].location!=NSNotFound)return;
   unsigned width=[c canBeConvertedToEncoding:NSASCIIStringEncoding]?1:2;
   if(cells+width>48||[line lengthOfBytesUsingEncoding:NSUTF8StringEncoding]+[c lengthOfBytesUsingEncoding:NSUTF8StringEncoding]>120){[rows addObject:[line copy]];[line setString:@""];cells=0;}
   if([c lengthOfBytesUsingEncoding:NSUTF8StringEncoding]<=120){[line appendString:c];cells+=width;}
- }];if(rows.count>=100000)return nil;if(line.length)[rows addObject:line];return rows.count?rows:nil;
+ }];if(rows.count>=200000)return nil;if(line.length)[rows addObject:line];return rows.count?rows:nil;
 }
-NSData *TWReaderWindow(NSArray<NSString *> *lines,NSString *title,uint32_t token,NSUInteger top,unsigned speed,BOOL automatic){if(!lines.count||lines.count>100000||top>=lines.count||!token||speed<30||speed>480)return nil;
+NSData *TWReaderWindow(NSArray<NSString *> *lines,NSString *title,uint32_t token,NSUInteger top,unsigned speed,BOOL automatic){if(!lines.count||lines.count>200000||top>=lines.count||!token||speed<30||speed>480)return nil;
  NSUInteger count=MIN(64,lines.count-top);NSMutableData *d=[NSMutableData dataWithLength:256+count*128];uint8_t *b=d.mutableBytes;wr_put(b,2);wr_put(b+4,(uint32_t)top);wr_put(b+8,(uint32_t)lines.count);wr_put(b+12,(uint32_t)count);wr_put(b+16,(uint32_t)top);wr_put(b+20,speed);wr_put(b+24,automatic);wr_put(b+28,token);
  NSData *name=Clip(title?:@"本机导入",95);memcpy(b+64,name.bytes,name.length);memcpy(b+160,"EPUB / TXT",10);
  for(NSUInteger i=0;i<count;i++){NSData *row=Clip(lines[top+i],127);memcpy(b+256+i*128,row.bytes,row.length);}return wr_validate(b,d.length)?d:nil;
@@ -60,9 +60,9 @@ static NSData *Extract(NSData *archive,NSDictionary *entry){if(!entry)return nil
  return wr_crc(d.bytes,d.length)==[entry[@"crc"]unsignedIntValue]?d:nil;
 }
 NSString *TWImportBook(NSData *data,NSString *extension,NSString **error){if(error)*error=@"导入失败：仅支持无加密 EPUB 或 UTF-8/UTF-16 TXT，文件不超过24 MiB";if(!data||data.length>24*1024*1024)return nil;
- if([extension.lowercaseString isEqual:@"txt"]){NSString *s=[[NSString alloc]initWithData:data encoding:NSUTF8StringEncoding];if(!s&&data.length>=2){const uint8_t *b=data.bytes;if((b[0]==255&&b[1]==254)||(b[0]==254&&b[1]==255))s=[[NSString alloc]initWithData:data encoding:NSUTF16StringEncoding];}return s.length<=4*1024*1024?s:nil;}
+ if([extension.lowercaseString isEqual:@"txt"]){NSString *s=[[NSString alloc]initWithData:data encoding:NSUTF8StringEncoding];if(!s&&data.length>=2){const uint8_t *b=data.bytes;if((b[0]==255&&b[1]==254)||(b[0]==254&&b[1]==255))s=[[NSString alloc]initWithData:data encoding:NSUTF16StringEncoding];}return s.length<=16*1024*1024?s:nil;}
  if(![extension.lowercaseString isEqual:@"epub"])return nil;NSDictionary *entries=ZipEntries(data);if(!entries)return nil;if(entries[@"META-INF/encryption.xml"]){if(error)*error=@"此 EPUB 含加密/混淆声明，本导入器不处理";return nil;}
  TWXML *container=XML(Extract(data,entries[@"META-INF/container.xml"]));NSString *root=Path(@"",container.root);TWXML *package=XML(Extract(data,root?entries[root]:nil));if(!package.spine.count)return nil;
- NSMutableString *text=[NSMutableString new];for(NSString *ident in package.spine){NSString *href=package.manifest[ident];if(!href)continue;NSString *path=Path(root.stringByDeletingLastPathComponent,href);TWXML *chapter=XML(Extract(data,path?entries[path]:nil));if(!chapter||text.length+chapter.text.length>4*1024*1024)return nil;[text appendString:chapter.text];[text appendString:@"\n\n"];}
+ NSMutableString *text=[NSMutableString new];for(NSString *ident in package.spine){NSString *href=package.manifest[ident];if(!href)continue;NSString *path=Path(root.stringByDeletingLastPathComponent,href);TWXML *chapter=XML(Extract(data,path?entries[path]:nil));if(!chapter||text.length+chapter.text.length>16*1024*1024)return nil;[text appendString:chapter.text];[text appendString:@"\n\n"];}
  return text.length?text:nil;
 }
