@@ -24,6 +24,7 @@ static NSData *Clip(NSString *s,NSUInteger max){if(![s isKindOfClass:NSString.cl
 - (BOOL)busy{return _packet!=nil;}
 - (BOOL)active{return _active;}
 - (void)reopen{if(!_gen||_failed)return;_needOpen=_active=YES;_needClose=NO;[self pump];}
+- (void)reset{_failed=NO;_transport=nil;_active=NO;_needOpen=NO;_needClose=NO;_packet=nil;_task=_nativeTask=nil;_early=nil;_coverAt=_lyricsAt=0;_note=@"会话已重置，重新打开音乐页";}
 - (void)changed{_lastClock=0;[self pump];}
 - (NSString *)note{return _note?:@"尚未同步 · 需要 TMU1 新固件";}
 - (BOOL)setup{NSString *peer=TIOProtocolDevice();if(!peer.length){_note=@"眼镜未连接";return NO;}if(_transport&&[_peer isEqual:peer])return !_failed;if(self.busy)return NO;
