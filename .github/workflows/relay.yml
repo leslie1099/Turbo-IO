@@ -12,13 +12,13 @@ jobs:
       - uses: actions/checkout@v4
       - name: Download artifact (fast on runner network)
         run: |
-          curl -L --fail -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" -H "Accept: application/vnd.github+json" -o ipa.zip "https://api.github.com/repos/leslie1099/Turbo-IO/actions/artifacts/10911096916/zip"
+          curl -L --fail -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" -H "Accept: application/vnd.github+json" -o ipa.zip "https://api.github.com/repos/leslie1099/Turbo-IO/actions/artifacts/10912700723/zip"
           ls -la ipa.zip
           sha256sum ipa.zip
       - name: Publish to release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create tmu1-final-61ce3b5 --repo leslie1099/Turbo-IO --title "Turbo-IO 最终完整版 IPA (61ce3b5)" --notes "听书正序+文稿+歌单1000+播放模式+上次歌曲恢复+Cookie导入+闪退修复+30秒息屏+死锁恢复+中断自动恢复" --latest=false || true
-          gh release upload tmu1-final-61ce3b5 ipa.zip --repo leslie1099/Turbo-IO --clobber
+          gh release create tmu1-final-319b45d --repo leslie1099/Turbo-IO --title "Turbo-IO 最终完整版 IPA (319b45d)" --notes "听书文稿+书单分离+播放模式+整本书导入+阅读进度记忆+首页精简（网易云+微信读书）" --latest=false || true
+          gh release upload tmu1-final-319b45d ipa.zip --repo leslie1099/Turbo-IO --clobber
           echo "RELEASE_READY"
