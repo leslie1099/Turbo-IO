@@ -17,6 +17,7 @@ FOUNDATION_EXPORT void TMMusicPauseForVoice(void);
 - (void)playSong:(NSDictionary *)song queue:(NSArray *)queue;
 - (void)play:(BOOL)value;
 - (void)step:(NSInteger)delta;
+- (void)nextTrack;
 - (void)seek:(double)seconds;
 - (void)demo;
 - (void)showOnGlasses;
