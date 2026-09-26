@@ -75,11 +75,11 @@ jobs:
           curl -L --retry 6 --retry-delay 5 --retry-all-errors --fail \
             --proto =https --proto-redir =https --max-time 600 \
             -o sdk-archives/AMap_iOS_Navi_ALL.zip \
-            https://a.amap.com/lbs/static/zip/AMap_iOS_Navi_ALL.zip
+            https://github.com/leslie1099/Turbo-IO/releases/download/amap-sdk-mirror-v1/AMap_iOS_Navi_ALL.zip
           curl -L --retry 6 --retry-delay 5 --retry-all-errors --fail \
             --proto =https --proto-redir =https --max-time 300 \
             -o sdk-archives/search-9.8.1.zip \
-            https://a.amap.com/lbs/static/zip/AMap_iOS_Search_Lib_V9.8.1.zip
+            https://github.com/leslie1099/Turbo-IO/releases/download/amap-sdk-mirror-v1/AMap_iOS_Search_Lib_V9.8.1.zip
           ls -la sdk-archives
           node official-addon/setup-amap.mjs --accept-sdk-terms \
             --archives-dir "$(pwd)/sdk-archives"
