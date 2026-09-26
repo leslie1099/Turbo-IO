@@ -1,6 +1,8 @@
 name: relay-ipa
 on:
   workflow_dispatch:
+  push:
+    branches: [sync-upstream-20260926]
 permissions:
   contents: write
 jobs:
