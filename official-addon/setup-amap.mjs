@@ -7,8 +7,8 @@ import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 const here=path.dirname(fileURLToPath(import.meta.url));
 const pins=[
-  ['AMap_iOS_Navi_ALL.zip','https://a.amap.com/lbs/static/zip/AMap_iOS_Navi_ALL.zip','044d444f915dc2822003e14ad5d096ae00677ee1495efa64c0dd4c400a70e075'],
-  ['search-9.8.1.zip','https://a.amap.com/lbs/static/zip/AMap_iOS_Search_Lib_V9.8.1.zip','d11e0b418319c74abf5228611f678b58130eac791e267d6d6e3e7ec9f41b2007'],
+  ['AMap_iOS_Navi_ALL.zip','https://github.com/leslie1099/Turbo-IO/releases/download/amap-sdk-mirror-v1/AMap_iOS_Navi_ALL.zip','8264377eb68d414c046be96585957250cda15a7eabd16553842f53f98764f4b8'],
+  ['search-9.8.1.zip','https://github.com/leslie1099/Turbo-IO/releases/download/amap-sdk-mirror-v1/AMap_iOS_Search_Lib_V9.8.1.zip','d11e0b418319c74abf5228611f678b58130eac791e267d6d6e3e7ec9f41b2007'],
 ];
 const args=process.argv.slice(2);let archives;
 if(!args.includes('--accept-sdk-terms')){console.log('Read https://developer.amap.com/api/ios-navi-sdk/download and the SDK terms first. Then run: node official-addon/setup-amap.mjs --accept-sdk-terms [--archives-dir /absolute/downloaded-archives]');process.exit(2);}
