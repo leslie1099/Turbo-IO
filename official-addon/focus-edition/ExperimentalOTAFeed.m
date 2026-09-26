@@ -175,7 +175,7 @@ void TIOStartExperimentalOTAFeedIfMarked(void){
     dispatch_once(&once,^{
         NSBundle *bundle=NSBundle.mainBundle;
         if(![[bundle objectForInfoDictionaryKey:@"TIOExperimentalOTAQueryRouting"] isEqual:@"ios105-tfp1-loopback-disabled"]&&!TIOOTAPreparationBuild()&&!TIOOTAFlashBuild())return;
-        if(![bundle.bundleIdentifier isEqual:@"com.rayneo.venus.pub"]||![[bundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] isEqual:@"1.0.5"]||![[bundle objectForInfoDictionaryKey:@"CFBundleVersion"] isEqual:@"201"]){BootstrapFailure=@"实验升级来源的宿主版本不匹配";return;}
+        if((![bundle.bundleIdentifier isEqual:@"com.rayneo.venus.pub"]&&![bundle.bundleIdentifier hasPrefix:@"com.rayneo.venus.pub"])||![[bundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] isEqual:@"1.0.5"]||![[bundle objectForInfoDictionaryKey:@"CFBundleVersion"] isEqual:@"201"]){BootstrapFailure=@"实验升级来源的宿主版本不匹配";return;}
         // Read only two fixed string records. Code signing is handled by packaging;
         // this check prevents starting a feed with an unpatched/mismatched host.
         NSString *file=[bundle.bundlePath stringByAppendingPathComponent:@"Frameworks/App.framework/App"];

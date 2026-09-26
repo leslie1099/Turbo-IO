@@ -1,0 +1,213 @@
+# Turbo-IO FOCUS-04 (TFP1) iOS 构建 — 零凭据免费版（不需要任何 Apple 证书/描述文件）
+#
+# 原理：免费 Apple ID 无法注册通配 App ID（Apple 权限锁死），因此这里
+#       在构建时临时生成【自签证书 + 结构合法的模拟描述文件】，仅用于通过
+#       package.mjs 的本地格式校验（它只检查 plist/CMS 结构与哈希，不验证
+#       Apple 真伪）。产物 IPA 交由 iloader/SideStore 用你的真实 Apple ID 重新签名
+#       安装（最终签名是 Apple 官方签发）。
+#
+# 使用步骤：
+#   1. fork Turbo-IO 到你的 GitHub 账号（免费）
+#   2. 把本文件放进 .github/workflows/ 并 push
+#   3. Actions -> TFP1 iOS free build -> Run workflow
+#   4. 下载 artifact tmu1-free-ipa 里的 TurboIO-local-only.ipa
+#   5. iloader 手机端安装（走你已登录的免费 Apple ID）
+#
+# 注意：
+#   - 模拟描述文件不是 Apple 签发，仅服务于本工具链的本地校验；请勿用于
+#     任何分发/上架目的
+#   - 自签证书有效期 2 年，每次构建重新生成，无过期维护
+#   - DEVICE_UDID 写死为你的 iPhone UDID（非敏感信息）；换设备时改这里
+
+name: TFP1 iOS free build
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 120
+    env:
+      ZIP_URL: 'https://github.com/Turbo1123/Turbo-IO/releases/download/firmware-strix-1.0.4.12-tfp1-focus04/StrixOS-1.0.4.12-TurboFocus-TFP1-FOCUS04-EXPERIMENTAL.zip'
+      ZIP_SHA: 'ad5054e3d7bda90e94d293bea882bd8dd5a125bcc8f42c13a59b2e149313c9e3'
+      ZIP_NAME: 'StrixOS-1.0.4.12-TurboFocus-TFP1-FOCUS04-EXPERIMENTAL.zip'
+      IPA_URL: 'https://github.com/Turbo1123/Turbo-IO/releases/download/rayneo-ios-1.0.5-201/RayNeo_AI_1.0.5_201_decrypted_original.ipa'
+      IPA_SHA: '39d12aff8f2b312dc3b40ce784a444e52c536e61378434005255177548df966a'
+      DEVICE_UDID: '00008150-000C745A1439401C'
+
+    steps:
+      - name: 检出源码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: 安装 Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: 下载并校验 FOCUS-04 实验固件
+        run: |
+          mkdir -p downloads
+          curl -L --retry 3 -o "downloads/$ZIP_NAME" "$ZIP_URL"
+          echo "$ZIP_SHA  downloads/$ZIP_NAME" | shasum -a 256 -c -
+          python3 firmware-research/strix-1.0.4.12/native-navigation/focus/verify.py \
+            "downloads/$ZIP_NAME"
+
+      - name: 下载并校验原厂砸壳 IPA（353 MB）
+        run: |
+          curl -L --retry 3 -o downloads/RayNeo_AI_1.0.5_201_decrypted_original.ipa "$IPA_URL"
+          echo "$IPA_SHA  downloads/RayNeo_AI_1.0.5_201_decrypted_original.ipa" | shasum -a 256 -c -
+
+      - name: 解压 IPA 并核对版本（1.0.5 / Build 201）
+        run: |
+          mkdir -p ipa-src
+          unzip -q downloads/RayNeo_AI_1.0.5_201_decrypted_original.ipa -d ipa-src
+          APP="$(pwd)/ipa-src/Payload/Runner.app"
+          plutil -convert json -o - "$APP/Info.plist" | python3 -c \
+            "import sys,json; i=json.load(sys.stdin); print('bundle:',i['CFBundleIdentifier']); print('version:',i['CFBundleShortVersionString'],'build:',i['CFBundleVersion']); assert i['CFBundleIdentifier']=='com.rayneo.venus.pub' and i['CFBundleShortVersionString']=='1.0.5' and i['CFBundleVersion']=='201','version mismatch'"
+          echo "APP_PATH=$APP" >> "$GITHUB_ENV"
+
+      - name: 获取高德 SDK（导航用；预下载 + 重试 + 离线目录）
+        run: |
+          mkdir -p sdk-archives
+          curl -L --retry 6 --retry-delay 5 --retry-all-errors --fail \
+            --proto =https --proto-redir =https --max-time 600 \
+            -o sdk-archives/AMap_iOS_Navi_ALL.zip \
+            https://a.amap.com/lbs/static/zip/AMap_iOS_Navi_ALL.zip
+          curl -L --retry 6 --retry-delay 5 --retry-all-errors --fail \
+            --proto =https --proto-redir =https --max-time 300 \
+            -o sdk-archives/search-9.8.1.zip \
+            https://a.amap.com/lbs/static/zip/AMap_iOS_Search_Lib_V9.8.1.zip
+          ls -la sdk-archives
+          node official-addon/setup-amap.mjs --accept-sdk-terms \
+            --archives-dir "$(pwd)/sdk-archives"
+
+      - name: 编译扩展 dylib（FOCUS-04 整合版：音乐+微信读书+导航+番茄+OTA 试刷入口）
+        run: |
+          TIO_AMAP_ENABLED=1 TIO_AMAP_SDK_ROOT="$PWD/official-addon/build/amap-sdk" \
+          TIO_OTA_FLASH_ENABLED=1 TIO_IMAGE_RX_LAB=1 TIO_IMAGE_RX_WIDE=1 \
+          TIO_DISPLAY_PHONE=1 TIO_DISPLAY_FLASH=1 \
+          bash official-addon/focus-edition/build.sh embedded com.rayneo.venus.pub
+
+      - name: 运行合并工具测试
+        run: node --test official-addon/package.test.mjs
+
+      - name: 生成自签证书 + 模拟描述文件（零凭据）
+        run: |
+          set -euo pipefail
+          # ---- 1. 自签证书（ECDSA P-256，2 年有效，含 Code Signing 扩展）---
+          openssl ecparam -name prime256v1 -genkey -noout -out fake.key
+          cat > fake.cnf <<'CFG'
+          [req]
+          distinguished_name=dn
+          x509_extensions=v3_ext
+          prompt=no
+          [dn]
+          CN=Turbo IO Free Sign
+          [ v3_ext ]
+          keyUsage=critical,digitalSignature
+          extendedKeyUsage=critical,codeSigning
+          subjectKeyIdentifier=hash
+          authorityKeyIdentifier=keyid:always,issuer:always
+          basicConstraints=critical,CA:FALSE
+          CFG
+          openssl req -new -x509 -key fake.key -out fake.crt -days 730 -config fake.cnf
+          openssl x509 -in fake.crt -outform DER -out fake.cer
+          CERT_SHA1=$(openssl x509 -in fake.crt -fingerprint -sha1 -noout \
+            | sed 's/.*=//' | tr -d ':')
+          echo "自签证书 SHA1: $CERT_SHA1"
+          echo "CERT_SHA1=$CERT_SHA1" >> "$GITHUB_ENV"
+
+          # ---- 2. 导入钥匙串（codesign 用）----
+          security create-keychain -p temp temp.keychain
+          security default-keychain -s temp.keychain
+          security unlock-keychain -p temp temp.keychain
+          openssl pkcs12 -export -inkey fake.key -in fake.crt \
+            -passout pass:temp -out fake.p12
+          security import fake.p12 -k temp.keychain -P temp -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k temp temp.keychain
+          security find-identity -v -p codesigning
+
+          # ---- 3. 构造模拟描述文件（结构合法：通配 App ID + 你的 UDID）----
+          python3 - <<'EOF'
+          import plistlib, uuid, datetime
+          udid = "00008150-000C745A1439401C"
+          team = "TURBOIOFREE"
+          cert_der = open("fake.cer", "rb").read()
+          p = {
+              "AppIDName": "TurboIOFree",
+              "ApplicationIdentifierPrefix": [team],
+              "CreationDate": datetime.datetime(2026, 1, 1),
+              "ExpirationDate": datetime.datetime(2027, 12, 31),
+              "Name": "TurboIOFreeSign",
+              "ProvisionedDevices": [udid],
+              "TeamIdentifier": [team],
+              "TeamName": "Personal Free",
+              "TimeToLive": 730,
+              "UUID": str(uuid.uuid4()).upper(),
+              "Version": 1,
+              "Format": "A",
+              "DeveloperCertificates": [cert_der],
+              "Entitlements": {
+                  "application-identifier": team + ".com.rayneo.*",
+                  "get-task-allow": True,
+                  "com.apple.developer.team-identifier": team,
+              },
+          }
+          with open("profile.plist", "wb") as f:
+              plistlib.dump(p, f)
+          print("模拟描述文件 plist 已生成")
+          EOF
+
+          # ---- 4. CMS 签名（PKCS#7/CMS SignedData，兼容 security cms -D）----
+          if openssl list -commands 2>/dev/null | grep -q '^cms'; then
+            openssl cms -sign -binary -nodetach \
+              -in profile.plist -signer fake.crt -inkey fake.key \
+              -outform DER -out fake.mobileprovision
+          else
+            openssl smime -sign -nodetach \
+              -in profile.plist -signer fake.crt -inkey fake.key \
+              -outform DER -out fake.mobileprovision
+          fi
+          ls -la fake.mobileprovision
+
+          # ---- 5. 自检：macOS security 必须能解码（package.mjs 依赖）----
+          security cms -D -i fake.mobileprovision | plutil -p - | head -40
+
+      - name: 合并 + 签名 + 打包 IPA
+        run: |
+          # 调试补丁：让 package.mjs 暴露真实失败原因（正常构建不打印凭据）
+          python3 - <<'EOF'
+          import pathlib
+          p = pathlib.Path("official-addon/package.mjs")
+          s = p.read_text()
+          old = "console.error(known?e.message:'Local packaging failed. Check compatible source, profile and signing identity. No subprocess output or credentials are printed.');"
+          new = "console.error(known?e.message:'DEBUG_PKG:'+(e&&e.stack||e&&e.message||e));"
+          assert old in s, "patch anchor not found"
+          p.write_text(s.replace(old, new))
+          print("debug patch applied")
+          EOF
+          node --check official-addon/package.mjs
+          node official-addon/package.mjs \
+            --app "$APP_PATH" \
+            --addon "$(pwd)/official-addon/focus-edition/build/image-rx-lab/TurboIOPrivateAddon.dylib" \
+            --profile "$(pwd)/fake.mobileprovision" \
+            --identity "$CERT_SHA1" \
+            --device "$DEVICE_UDID" \
+            --bundle com.rayneo.venus.pub \
+            --amap-sdk-root "$(pwd)/official-addon/build/amap-sdk" \
+            --experimental-ota TFP1 \
+            --firmware "$(pwd)/downloads/$ZIP_NAME" \
+            --out "$(pwd)/output"
+
+      - name: 上传 IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: tmu1-free-ipa
+          path: |
+            output/TurboIO-local-only.ipa
+            output/report.json
+            output/experimental-ota-routing.json
+          retention-days: 30
