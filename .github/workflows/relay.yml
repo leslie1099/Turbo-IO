@@ -1,0 +1,20 @@
+name: relay-ipa
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  relay:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download artifact (fast on runner network)
+        run: |
+          curl -L --fail -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" -H "Accept: application/vnd.github+json" -o ipa.zip "https://api.github.com/repos/leslie1099/Turbo-IO/actions/artifacts/10906322226/zip"
+          ls -la ipa.zip
+          sha256sum ipa.zip
+      - name: Publish to release
+        run: |
+          gh release create tmu1-final-cb6b55e --repo leslie1099/Turbo-IO --title "Turbo-IO 最终版 IPA (cb6b55e)" --notes "歌单记忆+听书+30秒息屏+死锁修复+中断自动恢复" --latest=false || true
+          gh release upload tmu1-final-cb6b55e ipa.zip --repo leslie1099/Turbo-IO --clobber
+          echo "RELEASE_READY"
