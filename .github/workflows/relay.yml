@@ -16,6 +16,8 @@ jobs:
           ls -la ipa.zip
           sha256sum ipa.zip
       - name: Publish to release
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           gh release create tmu1-final-cb6b55e --repo leslie1099/Turbo-IO --title "Turbo-IO 最终版 IPA (cb6b55e)" --notes "歌单记忆+听书+30秒息屏+死锁修复+中断自动恢复" --latest=false || true
           gh release upload tmu1-final-cb6b55e ipa.zip --repo leslie1099/Turbo-IO --clobber
