@@ -12,6 +12,7 @@ FOUNDATION_EXPORT void TMMusicPauseForVoice(void);
 @property(nonatomic,readonly) double position,duration;
 @property(nonatomic,readonly) NSString *status,*bridgeStatus;
 @property(nonatomic) NSInteger mode;
+@property(nonatomic) NSInteger playMode;
 @property(nonatomic) BOOL glasses;
 - (void)playSong:(NSDictionary *)song queue:(NSArray *)queue;
 - (void)play:(BOOL)value;
