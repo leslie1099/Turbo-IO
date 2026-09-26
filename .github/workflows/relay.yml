@@ -12,13 +12,13 @@ jobs:
       - uses: actions/checkout@v4
       - name: Download artifact (fast on runner network)
         run: |
-          curl -L --fail -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" -H "Accept: application/vnd.github+json" -o ipa.zip "https://api.github.com/repos/leslie1099/Turbo-IO/actions/artifacts/10912700723/zip"
+          curl -L --fail -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" -H "Accept: application/vnd.github+json" -o ipa.zip "https://api.github.com/repos/leslie1099/Turbo-IO/actions/artifacts/10912693522/zip"
           ls -la ipa.zip
           sha256sum ipa.zip
       - name: Publish to release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create tmu1-final-319b45d --repo leslie1099/Turbo-IO --title "Turbo-IO 最终完整版 IPA (319b45d)" --notes "听书文稿+书单分离+播放模式+整本书导入+阅读进度记忆+首页精简（网易云+微信读书）" --latest=false || true
-          gh release upload tmu1-final-319b45d ipa.zip --repo leslie1099/Turbo-IO --clobber
+          gh release create tmu1-final-94ead12 --repo leslie1099/Turbo-IO --title "Turbo-IO 最终完整版 IPA (94ead12)" --notes "修复：微信读书入口恢复 / 听书文稿 eapi 通道 / 歌曲歌单与听书歌单独立分段" --latest=false || true
+          gh release upload tmu1-final-94ead12 ipa.zip --repo leslie1099/Turbo-IO --clobber
           echo "RELEASE_READY"
