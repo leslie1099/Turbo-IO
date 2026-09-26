@@ -8,4 +8,5 @@ FOUNDATION_EXPORT NSArray<NSDictionary *> *TMParseLRC(NSString *);
 - (BOOL)hasLogin;
 - (void)logout;
 - (BOOL)importCookies:(NSArray<NSHTTPCookie *> *)cookies;
+- (BOOL)importCookieString:(NSString *)s;
 @end
