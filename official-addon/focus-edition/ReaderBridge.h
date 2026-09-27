@@ -2,6 +2,7 @@
 FOUNDATION_EXPORT BOOL TWDecodeReply(NSDictionary *, NSDictionary **);
 @interface TWReaderBridge:NSObject
 @property(copy) void(^command)(NSDictionary *);
+@property(copy) void(^onCommit)(void);
 @property(readonly) NSString *note;
 // BEGIN + CHUNK + COMMIT only, excluding OPEN/QUERY/SETTINGS/CLOSE.
 @property(readonly) NSDictionary *transferProgress;

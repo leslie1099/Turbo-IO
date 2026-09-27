@@ -47,6 +47,7 @@ BOOL TWDecodeReply(NSDictionary *e,NSDictionary **out){if(![e isKindOfClass:NSDi
 - (void)fail:(NSString *)reason{_transferStopped=_transferTotal>_transferConfirmed;_failed=YES;_active=NO;[_queue removeAllObjects];_packet=nil;_pendingEvent=nil;_task=_nativeTask=nil;_early=nil;_note=reason;/* Unknown native ownership: preserve the on-disk file, never delete on timeout. */}
 - (void)finish{if(!_packet||!_ack||!_fileDone||!_submitted)return;if([self isTransferJob]&&_transferConfirmed<_transferTotal)_transferConfirmed++;[_transport cleanup:_task];unsigned op=[_job[@"op"]unsignedIntValue];if(op==WR_CLOSE){_active=NO;_transport=nil;_pendingEvent=nil;}
  _packet=nil;_task=_nativeTask=nil;_early=nil;_job=nil;_next=NSProcessInfo.processInfo.systemUptime+.12;_note=op==WR_COMMIT?@"眼镜已收齐本页，等待画面呈现":op==WR_CLOSE?@"已关闭阅读页面":[NSString stringWithFormat:@"已确认 %u 包 · 剩余 %lu",_seq,(unsigned long)_queue.count];
+ if(op==WR_COMMIT&&self.onCommit){void(^cb)(void)=self.onCommit;self.onCommit=nil;cb();}
 }
 - (void)pump{NSTimeInterval now=NSProcessInfo.processInfo.systemUptime;if(_peer&&![_peer isEqual:TIOProtocolDevice()]){[self fail:@"连接已变化；本轮停止，重新连接后打开"];return;}if(_failed)return;if(_packet){if(now>=_deadline)[self fail:@"回执超时，已停止。请退出眼镜阅读页或等待90秒，再重新打开。"];return;}if(!_active||now<_next)return;
  if(!_queue.count&&_pendingEvent){NSDictionary *e=_pendingEvent;_pendingEvent=nil;if(self.command)self.command(e);}
