@@ -143,7 +143,8 @@ void TWReaderProbeIfRequested(void){if(![NSProcessInfo.processInfo.environment[@
 static void TWPageFlipFlip(GCKeyCode code){if(code==GCKeyCodePageDown||code==GCKeyCodeRightArrow||code==GCKeyCodeDownArrow||code==GCKeyCodeSpacebar){[TWLibrary.shared flipPage:1];}else if(code==GCKeyCodePageUp||code==GCKeyCodeLeftArrow||code==GCKeyCodeUpArrow){[TWLibrary.shared flipPage:-1];}}
 @interface TWPageFlipWatch:NSObject @end
 @implementation TWPageFlipWatch
-+ (void)start{if(@available(iOS 14.0,*)){GCKeyboard *kb=GCKeyboard.coalescedKeyboard;if(!kb||kb.keyboardInput.keyChangedHandler)return;kb.keyboardInput.keyChangedHandler=^(GCKeyboardInput *input,GCControllerButtonInput *button,GCKeyCode code,BOOL pressed){if(pressed)TWPageFlipFlip(code);};}}
++ (void)start{if(@available(iOS 14.0,*)){GCKeyboard *kb=GCKeyboard.coalescedKeyboard;if(!kb||kb.keyboardInput.keyChangedHandler)return;kb.keyboardInput.keyChangedHandler=^(GCKeyboardInput *input,GCControllerButtonInput *button,GCKeyCode code,BOOL pressed){if(pressed)TWPageFlipFlip(code);};}static dispatch_once_t once;dispatch_once(&once,^{@try{[AVAudioSession.sharedInstance addObserver:self forKeyPath:@"outputVolume" options:NSKeyValueObservingOptionNew context:NULL];}@catch(NSException *e){}});}
++ (void)observeValueForKeyPath:(NSString *)key ofObject:(id)object change:(NSDictionary *)change context:(void *)context{if(![key isEqual:@"outputVolume"])return;TWLibrary *lib=TWLibrary.shared;if(!lib.bridge.active)return;float now=[change[NSKeyValueChangeNewKey]floatValue];static float last=0;if(!last||fabs(now-last)<0.02){last=now;return;}BOOL up=now>last;last=now;[lib flipPage:up?1:-1];}
 @end
 void TWPageFlipInstall(void){if(@available(iOS 14.0,*)){[NSNotificationCenter.defaultCenter addObserverForName:GCKeyboardDidConnectNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *n){[TWPageFlipWatch start];}];[TWPageFlipWatch start];}}
 
