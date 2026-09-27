@@ -9,6 +9,7 @@
 #import "reader.h"
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #import <ImageIO/ImageIO.h>
+#import <GameController/GameController.h>
 
 static NSURL *Root(void){NSURL *u=[NSURL fileURLWithPath:[NSHomeDirectory()stringByAppendingPathComponent:@"Library/Application Support/TurboIOPrivateAddon/WeRead"] isDirectory:YES];[NSFileManager.defaultManager createDirectoryAtURL:u withIntermediateDirectories:YES attributes:@{NSFilePosixPermissions:@0700,NSFileProtectionKey:NSFileProtectionCompleteUntilFirstUserAuthentication} error:nil];return u;}
 static void Field(uint8_t *p,NSUInteger cap,NSString *s){if(![s isKindOfClass:NSString.class])return;__block NSUInteger at=0;[s enumerateSubstringsInRange:NSMakeRange(0,s.length) options:NSStringEnumerationByComposedCharacterSequences usingBlock:^(NSString *c,NSRange a,NSRange b,BOOL *stop){if([c rangeOfCharacterFromSet:NSCharacterSet.controlCharacterSet].location!=NSNotFound)return;NSData *d=[c dataUsingEncoding:NSUTF8StringEncoding];if(at+d.length>=cap){*stop=YES;return;}memcpy(p+at,d.bytes,d.length);at+=d.length;}];}
@@ -36,6 +37,7 @@ static NSData *CoverPixels(NSData *data,BOOL *decoded){if(decoded)*decoded=NO;NS
 - (void)stats;
 - (void)shelf:(NSUInteger)first;
 - (void)read:(NSUInteger)index row:(NSUInteger)row;
+- (void)flipPage:(NSInteger)delta;
 - (void)save;
 - (void)cancelWeb;
 @end
@@ -64,6 +66,7 @@ static NSData *CoverPixels(NSData *data,BOOL *decoded){if(decoded)*decoded=NO;NS
  self.loading=YES;self.coverResults=[NSMutableArray new];self.note=@"下载并处理当前四本封面…";[self coverPage:d first:first index:0 generation:++self.loadGeneration];}
 - (void)read:(NSUInteger)index row:(NSUInteger)row{if(index>=self.books.count||self.loading||self.bridge.busy)return;NSDictionary *b=self.books[index];NSString *file=b[@"file"];[self cancelWeb];if(![file isKindOfClass:NSString.class]||![file isEqual:file.lastPathComponent]||![file.pathExtension isEqual:@"txt"]){self.note=@"请先导入有权使用的 EPUB/TXT 正文";self.pendingBody=TWReaderWindow(@[@"需要本机导入正文",@"手机：导入 EPUB/TXT",@"也可导入 EPUB/TXT",@"长按返回书架"],b[@"title"],(uint32_t)index+1,0,30,NO);return;}
  if(index!=self.selected||!self.lines){NSString *text=[NSString stringWithContentsOfURL:[Root()URLByAppendingPathComponent:file] encoding:NSUTF8StringEncoding error:nil];self.lines=TWReadingLines(text);self.selected=index;}if(!self.lines){self.note=@"本机正文不存在或超出排版限制";return;}NSData *body=TWReaderWindow(self.lines,b[@"title"],(uint32_t)index+1,MIN(row,self.lines.count-1),self.speed,self.automatic);if(body){self.pendingBody=body;self.note=@"发送本机导入正文 · 非微信读书全文接口";[NSUserDefaults.standardUserDefaults setObject:@{@"book":@(index),@"row":@(MIN(row,self.lines.count-1))} forKey:@"TurboWeReadPositionV1"];}}
+- (void)flipPage:(NSInteger)delta{if(delta==0||self.loading||self.bridge.busy)return;NSDictionary *pos=[NSUserDefaults.standardUserDefaults dictionaryForKey:@"TurboWeReadPositionV1"];NSUInteger book=NSNotFound,row=0;if(pos&&[pos[@"book"]unsignedIntegerValue]<self.books.count){book=[pos[@"book"]unsignedIntegerValue];row=[pos[@"row"]unsignedIntegerValue];}if(book==NSNotFound||book>=self.books.count)return;NSDictionary *b=self.books[book];NSString *file=b[@"file"];if(![file isKindOfClass:NSString.class]||![file isEqual:file.lastPathComponent]||![file.pathExtension isEqual:@"txt"])return;if(book!=self.selected||!self.lines){NSString *text=[NSString stringWithContentsOfURL:[Root()URLByAppendingPathComponent:file] encoding:NSUTF8StringEncoding error:nil];self.lines=TWReadingLines(text);self.selected=book;}if(!self.lines||!self.lines.count)return;NSInteger step=64;NSInteger target=(NSInteger)row+delta*step;if(target<0)target=0;NSUInteger t=(NSUInteger)target;if(t>=self.lines.count)t=self.lines.count-1;if(t==row)return;[self read:book row:t];}
 @end
 BOOL TWReaderConsume(NSDictionary *e){return [[TWLibrary shared].bridge consume:e];}
 BOOL TWReaderPauseForOTA(void){TWLibrary *s=TWLibrary.shared;[s cancelWeb];if(!s.bridge.active&&!s.bridge.busy)return YES;s.loadGeneration++;s.loading=NO;s.pendingBody=nil;s.pendingSettings=NO;[s.bridge close];return NO;}
@@ -137,3 +140,10 @@ void TWReaderProbeIfRequested(void){if(![NSProcessInfo.processInfo.environment[@
   if(visible){UIGraphicsImageRenderer *renderer=[[UIGraphicsImageRenderer alloc]initWithBounds:page.view.bounds];UIImage *image=[renderer imageWithActions:^(UIGraphicsImageRendererContext *c){[page.view drawViewHierarchyInRect:page.view.bounds afterScreenUpdates:YES];}];[UIImagePNGRepresentation(image)writeToURL:[Root()URLByAppendingPathComponent:@"preview.png"] atomically:YES];}
  });}];
 }
+static void TWPageFlipFlip(GCKeyCode code){if(code==GCKeyCodePageDown||code==GCKeyCodeRightArrow||code==GCKeyCodeDownArrow||code==GCKeyCodeSpacebar){[TWLibrary.shared flipPage:1];}else if(code==GCKeyCodePageUp||code==GCKeyCodeLeftArrow||code==GCKeyCodeUpArrow){[TWLibrary.shared flipPage:-1];}}
+@interface TWPageFlipWatch:NSObject @end
+@implementation TWPageFlipWatch
++ (void)start{if(@available(iOS 14.0,*)){GCKeyboard *kb=GCKeyboard.coalescedKeyboard;if(!kb||kb.keyboardInput.keyChangedHandler)return;kb.keyboardInput.keyChangedHandler=^(GCKeyboardInput *input,GCControllerButtonInput *button,GCKeyCode code,BOOL pressed){if(pressed)TWPageFlipFlip(code);};}}
+@end
+void TWPageFlipInstall(void){if(@available(iOS 14.0,*)){[NSNotificationCenter.defaultCenter addObserverForName:GCKeyboardDidConnectNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *n){[TWPageFlipWatch start];}];[TWPageFlipWatch start];}}
+
