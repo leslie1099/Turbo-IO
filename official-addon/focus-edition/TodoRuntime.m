@@ -190,7 +190,7 @@ static void ObserveDeviceOrSuggestion(NSDictionary *args,BOOL inbound){
         if(inbound&&[envelope[@"type"] isEqual:@34]&&([body[@"cmd"] isEqual:@1]||[body[@"cmd"] isEqual:@2])){
             SuggestionChoicesReceived++;
             NSInteger choice=[body[@"cmd"] integerValue];
-            dispatch_async(dispatch_get_main_queue(),^{[[NSClassFromString(@"TOSmsTodoCore") shared] handleSuggestionChoice:choice payload:body];});
+            dispatch_async(dispatch_get_main_queue(),^{id cls=NSClassFromString(@"TOSmsTodoCore");id core=[cls shared];[core handleSuggestionChoice:choice payload:body];});
         }
         SaveEvidence();return;
     }

@@ -120,7 +120,7 @@ static BOOL LoadMediaRemote(void){
         [self pushLyric:lyric];
     }
     // 暂停时保持最后一句（常亮），不做任何操作
-    _ = playing;
+    (void)playing;
 }
 
 - (void)pushLyric:(NSString *)lyric{
