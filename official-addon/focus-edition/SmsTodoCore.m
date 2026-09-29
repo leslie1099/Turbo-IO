@@ -1,12 +1,15 @@
 // SmsTodoCore.m
-// 短信转待办闭环：
+// 短信转待办闭环（方案 A · 官方已验证通道）：
 //  快捷指令自动化（收到含"取件码/验证码/快递"的短信）→ POST 到 127.0.0.1:60123/sms
-//  → 本模块解析关键信息 → 通过官方"建议卡片"通道(rayneonet businessId 21, envelope type 33)
-//    推送到眼镜 → 用户点头确认/摇头取消（官方头控，type 34 回执 cmd 1/2）
-//  → 确认则写入 Apple 提醒事项「待办」清单（复用 TIOAppleCreateReminder）。
+//  → 本模块解析关键信息 → 走官方音乐页通道(TMMusicBridge, 与无感歌词同一已验证链路)
+//    把短信内容推送到眼镜显示（8 秒后自动关闭，不长期占用）
+//  → 同时自动写入 Apple 提醒事项「待办」清单（复用 TIOAppleCreateReminder）。
+//  说明：自研"建议卡"通道(businessId 21+type33)官方 1.0.5 不识别、静默丢弃，
+//  已废弃为主路径；SendSuggestionCard/handleSuggestionChoice 保留待二期逆向官方头控后启用。
 #import "SmsTodoCore.h"
 #import "AppleCalendarSync.h"
 #import "ProtocolContext.h"
+#import "MusicBridge.h"
 #import <sys/socket.h>
 #import <netinet/in.h>
 #import <arpa/inet.h>
@@ -56,8 +59,9 @@ static NSData *FlutterTypedData(NSData *payload){
     return typed;
 }
 
-// ---- 通过官方 rayneonet 通道发送建议卡片（businessId 21, envelope type 33） ----
-static BOOL SendSuggestionCard(NSDictionary *body){
+// ---- 通过官方 rayneonet 通道发送建议卡片（businessId 21, envelope type 33）----
+// 注意：官方 1.0.5 不识别此业务号（静默丢弃），已不作为主路径；保留供二期逆向官方头控后复用。
+__attribute__((unused)) static BOOL SendSuggestionCard(NSDictionary *body){
     NSString *device=TIOProtocolDevice();id plugin=TIOProtocolPlugin();
     if(!device.length||!plugin)return NO;
     NSData *envelope=Envelope(33,body);NSData *typed=FlutterTypedData(envelope);
@@ -127,25 +131,38 @@ static void CreateTodo(NSString *title){
     }
 }
 
+// ---- 官方音乐页通道：把短信内容显示到眼镜（与无感歌词同一已验证链路） ----
+- (BOOL)showSmsOnGlasses:(NSDictionary *)parsed{
+    if(!TIOProtocolDevice().length){[self addEvent:@"眼镜未连接，跳过眼镜显示（待办已写入）"];return NO;}
+    TMMusicBridge *bridge=[TMMusicBridge shared];
+    if(bridge.failed)[bridge reset];
+    NSString *title=parsed[@"title"]?:@"短信提醒",*text=parsed[@"text"];
+    NSMutableArray *lyrics=[NSMutableArray array];
+    [lyrics addObject:@{@"ms":@0,@"text":title}];
+    if(text.length&&![text isEqual:title]){
+        NSString *summary=text.length>60?[text substringToIndex:60]:text;
+        [lyrics addObject:@{@"ms":@0,@"text":summary}];
+    }
+    [bridge openWithCover:nil lyrics:lyrics];
+    // 短暂提示：8 秒后自动关闭音乐页，不长期占用；歌词跟随会在下一句歌词时重新打开
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(8*NSEC_PER_SEC)),dispatch_get_main_queue(),^{
+        TMMusicBridge *b=[TMMusicBridge shared];
+        if(!b.failed)[b close];
+    });
+    return YES;
+}
+
 // ---- 入口：处理一条短信文本 ----
 - (BOOL)ingestText:(NSString *)text{
     NSDictionary *parsed=ParseSms(text);
     if(!parsed){[self addEvent:@"收到短信但未识别取件码/验证码/快递信息"];return NO;}
     NSString *title=parsed[@"title"];
-    [[NSUserDefaults standardUserDefaults] setObject:title forKey:@"TOSmsPendingTitle"];
-    NSDictionary *body=@{
-        @"type":@1,
-        @"requestId":[NSUUID UUID].UUIDString,
-        @"title":title,
-        @"text":parsed[@"text"],
-        @"positive":@"点头加入待办",
-        @"negative":@"摇头忽略"
-    };
-    [self addEvent:[NSString stringWithFormat:@"识别%@：%@ → 推送眼镜建议卡",parsed[@"kind"],parsed[@"code"]]];
-    BOOL ok=SendSuggestionCard(body);
-    self.status=ok?[NSString stringWithFormat:@"已推送待确认：%@（点头确认/摇头取消）",title]:@"推送失败：眼镜未连接或通道不可用";
-    if(!ok)[self addEvent:@"建议卡推送失败（眼镜未连接？）"];
-    return ok;
+    [self addEvent:[NSString stringWithFormat:@"识别%@：%@ → 眼镜显示 + 自动加入待办",parsed[@"kind"],parsed[@"code"]]];
+    BOOL shown=[self showSmsOnGlasses:parsed];
+    CreateTodo(title);
+    self.status=shown?[NSString stringWithFormat:@"已显示到眼镜并加入待办：%@",title]:@"眼镜显示失败（未连接？），待办已自动写入";
+    if(!shown)[self addEvent:@"眼镜显示失败（眼镜未连接？），待办已自动写入"];
+    return shown;
 }
 - (void)sendSuggestionCard:(NSString *)title text:(NSString *)text{
     [[NSUserDefaults standardUserDefaults] setObject:title forKey:@"TOSmsPendingTitle"];

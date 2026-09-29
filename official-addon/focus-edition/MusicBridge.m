@@ -20,6 +20,7 @@ static NSData *Clip(NSString *s,NSUInteger max){if(![s isKindOfClass:NSString.cl
  uint32_t _sid,_gen,_seq,_sendingGen;NSUInteger _coverAt,_lyricsAt,_chunk;unsigned _op;BOOL _ack,_fileDone,_submitted,_active,_needOpen,_needClose,_failed;
  NSTimeInterval _deadline,_lastClock,_next;NSUInteger _count;NSMutableOrderedSet *_commands;
 }
++ (TMMusicBridge *)shared{static TMMusicBridge *one=nil;static dispatch_once_t once;dispatch_once(&once,^{one=[TMMusicBridge new];});return one;}
 - (instancetype)init{if((self=[super init])){TDPDiagConfigure([NSURL fileURLWithPath:[NSHomeDirectory() stringByAppendingPathComponent:@"Library/Application Support/TurboIOPrivateAddon/display-phone-diagnostics.json"]]);TDPDiagRecord(@"state",@{@"code":@2302});}return self;}
 - (BOOL)busy{return _packet!=nil;}
 - (BOOL)active{return _active;}

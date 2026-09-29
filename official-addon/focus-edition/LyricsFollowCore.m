@@ -53,7 +53,7 @@ static BOOL LoadMediaRemote(void){
 
 - (instancetype)init{
     if((self=[super init])){
-        _bridge=[TMMusicBridge new];
+        _bridge=[TMMusicBridge shared];
         _status=@"歌词跟随待机";
     }
     return self;

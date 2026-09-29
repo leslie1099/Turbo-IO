@@ -1,6 +1,6 @@
 // SmsTodoCore.h
-// 短信转待办：本地 HTTP 监听快捷指令转发的短信 → 解析关键信息（取件码/验证码/快递）→
-// 经官方"建议卡片"通道推送到眼镜 → 用户点头/摇头（官方头控）确认 → 写入 Apple 提醒事项「待办」清单。
+// 短信转待办（方案 A）：本地 HTTP 监听快捷指令转发的短信 → 解析关键信息（取件码/验证码/快递）→
+// 经官方音乐页通道(TMMusicBridge，与无感歌词同链路)显示到眼镜 → 自动写入 Apple 提醒事项「待办」清单。
 #import <Foundation/Foundation.h>
 
 @interface TOSmsTodoCore : NSObject

@@ -1,6 +1,7 @@
 #import <Foundation/Foundation.h>
 BOOL TMMusicReply(NSDictionary *event,NSDictionary **reply);
 @interface TMMusicBridge:NSObject
++ (TMMusicBridge *)shared;
 @property(nonatomic,copy) void(^command)(NSDictionary *);
 @property(nonatomic,copy) NSDictionary *(^snapshot)(void);
 @property(nonatomic,readonly) BOOL busy;
