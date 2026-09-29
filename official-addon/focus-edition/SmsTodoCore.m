@@ -192,6 +192,10 @@ static void CreateTodo(NSString *title){
     NSInteger status=400;NSString *response=@"bad request";
     if(headerEnd.location!=NSNotFound){
         NSString *head=[[NSString alloc]initWithData:[buffer subdataWithRange:NSMakeRange(0,headerEnd.location)] encoding:NSUTF8StringEncoding];
+        NSString *requestLine=[head componentsSeparatedByString:@"\r\n"].firstObject;
+        NSArray *parts=[requestLine componentsSeparatedByString:@" "];
+        NSString *method=parts.count?parts.firstObject:@"";
+        NSString *target=parts.count>1?parts[1]:@"";
         NSInteger contentLength=0;
         for(NSString *line in [head componentsSeparatedByString:@"\r\n"]){
             if([line.lowercaseString hasPrefix:@"content-length:"]){
@@ -199,13 +203,31 @@ static void CreateTodo(NSString *title){
                 if(v>0&&v<=65536)contentLength=v;
             }
         }
-        BOOL isSms=[[head componentsSeparatedByString:@" "].firstObject isEqual:@"POST"]&&[head rangeOfString:@" /sms"].location!=NSNotFound;
+        BOOL isSms=[target isEqual:@"/sms"]||[target hasPrefix:@"/sms?"]||[target isEqual:@"/s"]||[target hasPrefix:@"/s?"];
         if(isSms){
-            NSData *bodyData=contentLength?[buffer subdataWithRange:NSMakeRange(headerEnd.location+4,MIN(contentLength,buffer.length-headerEnd.location-4))]:nil;
-            NSString *text=[[NSString alloc]initWithData:bodyData encoding:NSUTF8StringEncoding];
+            NSString *text=nil;
+            if([method isEqual:@"POST"]){
+                NSData *bodyData=contentLength?[buffer subdataWithRange:NSMakeRange(headerEnd.location+4,MIN(contentLength,buffer.length-headerEnd.location-4))]:nil;
+                text=[[NSString alloc]initWithData:bodyData encoding:NSUTF8StringEncoding];
+            }else if([method isEqual:@"GET"]){
+                NSRange q=[target rangeOfString:@"?"];
+                if(q.location!=NSNotFound){
+                    NSString *query=[target substringFromIndex:q.location+1];
+                    NSString *escaped=query;
+                    for(NSString *pair in [query componentsSeparatedByString:@"&"]){
+                        NSArray *kv=[pair componentsSeparatedByString:@"="];
+                        if(kv.count==2&&[kv[0] isEqual:@"text"]){
+                            escaped=[kv[1] stringByReplacingOccurrencesOfString:@"+" withString:@" "];
+                            escaped=[escaped stringByRemovingPercentEncoding]?:escaped;
+                            text=escaped;
+                        }
+                    }
+                }
+            }
             if(text.length){BOOL ok=[self ingestText:text];status=ok?200:202;response=ok?@"{\"ok\":true}":@"{\"ok\":false,\"reason\":\"unrecognized\"}";}
             else{status=400;response=@"{\"ok\":false,\"reason\":\"empty\"}";}
-        }else{status=404;response=@"not found";}
+        }else if([target isEqual:@"/health"]){status=200;response=@"{\"ok\":true,\"service\":\"sms-todo\"}";}
+        else{status=404;response=@"not found";}
     }
     NSData *resp=[response dataUsingEncoding:NSUTF8StringEncoding];
     NSString *headOut=[NSString stringWithFormat:@"HTTP/1.1 %ld %@\r\nContent-Type: text/plain\r\nContent-Length: %lu\r\nConnection: close\r\n\r\n",(long)status,status==200?@"OK":@"",(unsigned long)resp.length];
