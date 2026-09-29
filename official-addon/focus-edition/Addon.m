@@ -582,9 +582,9 @@ __attribute__((constructor)) static void Load(void) {
             if(valid)TIOInstallTodoRuntime();
             TWPageFlipInstall();
             // 无感歌词跟随：系统级监听任何音乐 App（QQ音乐/网易云），自动推眼镜。默认开启。
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW,6*NSEC_PER_SEC),dispatch_get_main_queue(),^{@try{id cls=NSClassFromString(@"TOLyricsFollow");id obj=[cls shared];[obj start];}@catch(NSException *e){}});
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW,6*NSEC_PER_SEC),dispatch_get_main_queue(),^{@try{id cls=NSClassFromString(@"TOLyricsFollow");id obj=((id(*)(id,SEL))objc_msgSend)(cls,NSSelectorFromString(@"shared"));((void(*)(id,SEL))objc_msgSend)(obj,NSSelectorFromString(@"start"));}@catch(NSException *e){}});
             // 短信转待办：快捷指令转发入口 + 官方建议卡点头/摇头确认。随 App 启动常驻监听。
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW,8*NSEC_PER_SEC),dispatch_get_main_queue(),^{@try{id cls=NSClassFromString(@"TOSmsTodoCore");id obj=[cls shared];[obj start];}@catch(NSException *e){}});
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW,8*NSEC_PER_SEC),dispatch_get_main_queue(),^{@try{id cls=NSClassFromString(@"TOSmsTodoCore");id obj=((id(*)(id,SEL))objc_msgSend)(cls,NSSelectorFromString(@"shared"));((void(*)(id,SEL))objc_msgSend)(obj,NSSelectorFromString(@"start"));}@catch(NSException *e){}});
             TIOOTAFlashDisableAutoUpdateIfRequested();
             // Explicit developer launch, not a stored preference or automatic restore.
             // armArchive additionally requires the installed preparation interlock.
