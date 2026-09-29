@@ -581,6 +581,8 @@ __attribute__((constructor)) static void Load(void) {
             if(VoiceExitReady)OriginalAudioStart=(void *)method_setImplementation(class_getInstanceMethod(voice,NSSelectorFromString(@"onAudioRecordStart")),(IMP)AudioStartHook);
             if(valid)TIOInstallTodoRuntime();
             TWPageFlipInstall();
+            // 无感歌词跟随：系统级监听任何音乐 App（QQ音乐/网易云），自动推眼镜。默认开启。
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW,6*NSEC_PER_SEC),dispatch_get_main_queue(),^{@try{[[NSClassFromString(@"TOLyricsFollow") shared] start];}@catch(NSException *e){}});
             TIOOTAFlashDisableAutoUpdateIfRequested();
             // Explicit developer launch, not a stored preference or automatic restore.
             // armArchive additionally requires the installed preparation interlock.
