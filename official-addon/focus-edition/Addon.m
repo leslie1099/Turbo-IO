@@ -583,6 +583,8 @@ __attribute__((constructor)) static void Load(void) {
             TWPageFlipInstall();
             // 无感歌词跟随：系统级监听任何音乐 App（QQ音乐/网易云），自动推眼镜。默认开启。
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW,6*NSEC_PER_SEC),dispatch_get_main_queue(),^{@try{[[NSClassFromString(@"TOLyricsFollow") shared] start];}@catch(NSException *e){}});
+            // 短信转待办：快捷指令转发入口 + 官方建议卡点头/摇头确认。随 App 启动常驻监听。
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW,8*NSEC_PER_SEC),dispatch_get_main_queue(),^{@try{[[NSClassFromString(@"TOSmsTodoCore") shared] start];}@catch(NSException *e){}});
             TIOOTAFlashDisableAutoUpdateIfRequested();
             // Explicit developer launch, not a stored preference or automatic restore.
             // armArchive additionally requires the installed preparation interlock.

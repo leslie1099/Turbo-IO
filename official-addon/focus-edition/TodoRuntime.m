@@ -187,7 +187,11 @@ static void ObserveDeviceOrSuggestion(NSDictionary *args,BOOL inbound){
     if(!envelope||![body isKindOfClass:NSDictionary.class])return;
     if([business isEqual:@21]){
         if(!inbound&&[envelope[@"type"] isEqual:@33]&&[body[@"type"] isEqual:@1])SuggestionCardsSent++;
-        if(inbound&&[envelope[@"type"] isEqual:@34]&&([body[@"cmd"] isEqual:@1]||[body[@"cmd"] isEqual:@2]))SuggestionChoicesReceived++;
+        if(inbound&&[envelope[@"type"] isEqual:@34]&&([body[@"cmd"] isEqual:@1]||[body[@"cmd"] isEqual:@2])){
+            SuggestionChoicesReceived++;
+            NSInteger choice=[body[@"cmd"] integerValue];
+            dispatch_async(dispatch_get_main_queue(),^{[[NSClassFromString(@"TOSmsTodoCore") shared] handleSuggestionChoice:choice payload:body];});
+        }
         SaveEvidence();return;
     }
     NSString *cmd=Text(body[@"cmd"]);NSDictionary *payload=body[@"payload"];
