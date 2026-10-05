@@ -1,24 +1,43 @@
+# 自动发布最新构建 IPA 到 GitHub Release（永久保留，不再受 Actions artifact 7 天过期限制）
+# 触发：TFP1 iOS free build 成功后自动执行；也可手动 workflow_dispatch 重发最新包
 name: relay-ipa
 on:
+  workflow_run:
+    workflows: [TFP1 iOS free build]
+    types: [completed]
   workflow_dispatch:
-  push:
-    branches: [sync-upstream-20260926]
 permissions:
   contents: write
 jobs:
   relay:
     runs-on: macos-15
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     steps:
       - uses: actions/checkout@v4
-      - name: Download artifact (fast on runner network)
+      - name: Resolve latest build artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          curl -L --fail -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" -H "Accept: application/vnd.github+json" -o ipa.zip "https://api.github.com/repos/leslie1099/Turbo-IO/actions/artifacts/10912693522/zip"
+          RUN_ID="${{ github.event.workflow_run.id }}"
+          if [ -z "$RUN_ID" ] || [ "$RUN_ID" = "null" ]; then
+            RUN_ID=$(gh api "repos/leslie1099/Turbo-IO/actions/runs?branch=sync-upstream-20260926&per_page=10" --jq '[.workflow_runs[] | select(.name=="TFP1 iOS free build")][0].id')
+          fi
+          echo "RUN_ID=$RUN_ID"
+          ART_ID=$(gh api "repos/leslie1099/Turbo-IO/actions/runs/$RUN_ID/artifacts" --jq '[.artifacts[] | select(.name=="tmu1-free-ipa")][0].id')
+          SHA=$(gh api "repos/leslie1099/Turbo-IO/actions/runs/$RUN_ID" --jq '.head_sha' | cut -c1-7)
+          echo "ART_ID=$ART_ID" >> $GITHUB_ENV
+          echo "SHA=$SHA" >> $GITHUB_ENV
+          echo "Resolved artifact $ART_ID for commit $SHA"
+      - name: Download artifact
+        run: |
+          curl -L --fail -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" -H "Accept: application/vnd.github+json" -o ipa.zip "https://api.github.com/repos/leslie1099/Turbo-IO/actions/artifacts/${{ env.ART_ID }}/zip"
           ls -la ipa.zip
           sha256sum ipa.zip
       - name: Publish to release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create tmu1-final-94ead12 --repo leslie1099/Turbo-IO --title "Turbo-IO 最终完整版 IPA (94ead12)" --notes "修复：微信读书入口恢复 / 听书文稿 eapi 通道 / 歌曲歌单与听书歌单独立分段" --latest=false || true
-          gh release upload tmu1-final-94ead12 ipa.zip --repo leslie1099/Turbo-IO --clobber
-          echo "RELEASE_READY"
+          TAG="tmu1-final-${{ env.SHA }}"
+          gh release create "$TAG" --repo leslie1099/Turbo-IO --title "Turbo-IO IPA (${{ env.SHA }})" --notes "自动发布最新构建（短信→眼镜显示+自动待办 / 无感歌词跟随）" || true
+          gh release upload "$TAG" ipa.zip --repo leslie1099/Turbo-IO --clobber
+          echo "RELEASE_READY tag=$TAG"
