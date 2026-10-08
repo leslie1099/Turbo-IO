@@ -53,19 +53,25 @@ static BOOL ValidApple(NSDictionary *r){return [r isKindOfClass:NSDictionary.cla
             if([r[@"owned"] boolValue]&&official[r[@"wireId"]]){r[@"problem"]=@"wire_collision";continue;}
             [self applyApple:apple record:r now:now];[matched addObject:r[@"source"]];continue;
         }
-        NSString *source=S(apple[@"sourceID"]);NSDictionary *original=nil;NSString *wire=nil;
+        NSString *source=S(apple[@"sourceID"]);NSDictionary *original=nil;NSString *wire=nil;BOOL imported=NO;
         if(source.length){for(NSDictionary *row in rows){NSString *key=[NSString stringWithFormat:@"%@:%@",device,row[@"wireId"]];if([source isEqual:key]){original=row;wire=row[@"wireId"];break;}}
-            if(!original||self.records[source]||!TIOTodoEncodeStatusUpdate(original,[original[@"status"] integerValue],1))continue;
-        }else{
-            // Do not duplicate an older official link whose row is unavailable.
-            // New imports include pending reminders; completed history stays put.
-            if([apple[@"hasLink"] boolValue]||[apple[@"status"] boolValue]||self.records.count>=1000)continue;
+            if(!original||self.records[source]||!TIOTodoEncodeStatusUpdate(original,[original[@"status"] integerValue],1)){
+                // sourceID 指向的官方行已不存在（如短信待办的 sms-* 本地源）：它不是官方行，
+                // 降级为本地导入，让该 Apple 待办进入 Ledger 并被推送到眼镜，而不是永久跳过。
+                if(self.records[source]&&!original)continue;
+                original=nil;wire=nil;
+            }
+        }
+        if(!original){
+            // 新导入：未完成、数量上限内。已完成的旧历史不同步；官方行缺失的假 link 同样导入。
+            if([apple[@"status"] boolValue]||self.records.count>=1000)continue;
             uint64_t number=0;do{arc4random_buf(&number,sizeof(number));number=1000000000000ULL+number%8000000000000ULL;wire=[@(number) stringValue];}while([taken containsObject:wire]);
             source=[NSString stringWithFormat:@"%@:%@",device,wire];[taken addObject:wire];
             NSTimeInterval created=[apple[@"createdAt"] doubleValue];if(created<=0)created=now;
             original=@{@"wireId":wire,@"title":apple[@"title"],@"status":apple[@"status"],@"createTime":[NSString stringWithFormat:@"%.0f",MAX(1,created)],@"lastModifiedTime":[NSString stringWithFormat:@"%.0f",MAX(1,now)],@"isImportant":@NO};
+            imported=YES;
         }
-        r=[@{@"source":source,@"device":device,@"wireId":wire,@"owned":@(S(apple[@"sourceID"]).length==0),@"row":original,@"apple":apple,@"official":Fields(original),@"bound":@NO,@"active":@YES,@"revision":NSUUID.UUID.UUIDString} mutableCopy];
+        r=[@{@"source":source,@"device":device,@"wireId":wire,@"owned":@(imported),@"row":original,@"apple":apple,@"official":Fields(original),@"bound":@NO,@"active":@YES,@"revision":NSUUID.UUID.UUIDString} mutableCopy];
         [self applyApple:apple record:r now:now];self.records[source]=r;[matched addObject:source];
     }[self save];
 }

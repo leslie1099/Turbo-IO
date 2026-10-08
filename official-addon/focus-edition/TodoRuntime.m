@@ -749,7 +749,11 @@ static NSString *FriendlySyncStatus(NSString *status,BOOL matching){
 - (void)viewDidDisappear:(BOOL)animated{[super viewDidDisappear:animated];[self.mirrorRefreshTimer invalidate];self.mirrorRefreshTimer=nil;}
 - (void)refresh{EnsurePendingOfficialCreates();if(Snapshot&&Device.length)ReconcileOfficialCreates(Snapshot,Device,YES);[AppleCompletionRetryAt removeAllObjects];[AppleCompletionRetryCount removeAllObjects];[CompletionTitleFailures removeAllObjects];[UnlinkedCompletionRecoverySuppressed removeAllObjects];for(NSString *source in CompletionLedger().pendingSources)[CompletionLedger() resetConfirmationPresentation:source];ProcessPendingAppleCompletions();TIOTodoMirrorRefresh();[self.tableView reloadData];}
 - (BOOL)rowDone:(NSDictionary *)item{NSString *sourceID=QualifiedSource(Device,item[@"wireId"]);BOOL pending=sourceID&&[CompletionLedger() isPending:sourceID];return [item[@"status"] isEqual:@1]||pending;}
-- (NSArray<NSDictionary *> *)todoRows{NSArray *items=Snapshot[@"items"];NSArray *rows=TIOTodoMirrorDisplayRows(Device,[items isKindOfClass:NSArray.class]?items:@[]);NSMutableArray *open=[NSMutableArray new],*closed=[NSMutableArray new];for(NSDictionary *row in rows){if([self rowDone:row])[closed addObject:row];else [open addObject:row];}return [open arrayByAddingObjectsFromArray:closed];}
+- (NSArray<NSDictionary *> *)todoRows{NSArray *items=Snapshot[@"items"];NSArray *rows=TIOTodoMirrorDisplayRows(Device,[items isKindOfClass:NSArray.class]?items:@[]);NSMutableArray *open=[NSMutableArray new],*closed=[NSMutableArray new];for(NSDictionary *row in rows){if([self rowDone:row])[closed addObject:row];else [open addObject:row];}
+    // 新→旧：按 createTime 降序，最新待办显示在最上方；无时间戳的行保持相对顺序。
+    NSComparator cmp=^NSComparisonResult(NSDictionary *a,NSDictionary *b){long long ta=[Text(a[@"createTime"]) longLongValue],tb=[Text(b[@"createTime"]) longLongValue];if(ta==tb)return NSOrderedSame;return ta>tb?NSOrderedAscending:NSOrderedDescending;};
+    [open sortUsingComparator:cmp];[closed sortUsingComparator:cmp];
+    return [open arrayByAddingObjectsFromArray:closed];}
 - (NSArray<NSDictionary *> *)scheduleRows{return TIOAppleScheduleRows();}
 - (NSUInteger)pendingCompletionCount {return CompletionLedger().pendingCount;}
 - (NSInteger)tableView:(UITableView *)t numberOfRowsInSection:(NSInteger)s{return 1+self.todoRows.count+self.scheduleRows.count;}
