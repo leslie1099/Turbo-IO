@@ -53,6 +53,8 @@ static id CompletionForegroundObserver;
 static void ProcessPendingAppleCompletions(void);
 static NSDictionary *Snapshot,*Baseline;
 static NSString *Device,*TestTitle,*TestWire,*TestDevice,*State=@"尚未观察到官方待办列表";
+static NSArray *AppleTodoFallback;
+static NSTimeInterval AppleTodoFallbackAt;
 static NSString *LastNlpDomain,*LastNlpIntent,*LastNlpCommand;
 static NSString *LastAppleCompletion=@"not_attempted";
 static NSInteger LastAppleCompletionErrorCode;
@@ -115,6 +117,23 @@ void TIOTodoSetChatContext(id listener,id response){ChatListener=listener;ChatCo
 static id Get(id o,NSString *k){@try{return [o valueForKey:k];}@catch(NSException *e){return nil;}}
 static NSData *Data(id v){if([v isKindOfClass:NSData.class])return v;if([NSStringFromClass([v class]) isEqual:@"FlutterStandardTypedData"]){id d=Get(v,@"data");if([d isKindOfClass:NSData.class])return d;}return nil;}
 static NSString *Text(id o){return [o isKindOfClass:NSString.class]?o:@"";}
+// 官方待办快照（businessId 22）可能长期不触发（从未用官方语音建待办）：
+// 待办页直接以 Apple 提醒事项为数据源兜底，保证页面始终有内容。
+static void LoadAppleTodoFallback(void){
+    if(NSDate.date.timeIntervalSince1970-AppleTodoFallbackAt<4)return;
+    TIOAppleReadTodoList(^(NSDictionary *result){
+        if(![result[@"status"] isEqual:@"ok"]||![result[@"items"] isKindOfClass:NSArray.class])return;
+        AppleTodoFallback=result[@"items"];AppleTodoFallbackAt=NSDate.date.timeIntervalSince1970;
+    });
+}
+static NSArray<NSDictionary *> *AppleTodoFallbackRows(void){
+    NSMutableArray *rows=[NSMutableArray array];
+    for(NSDictionary *a in AppleTodoFallback?:@[]){
+        if(![a[@"title"] isKindOfClass:NSString.class]||![a[@"title"] length])continue;
+        [rows addObject:@{@"wireId":Text(a[@"identifier"]),@"title":a[@"title"],@"status":a[@"status"]?:@0,@"createTime":[NSString stringWithFormat:@"%.0f",MAX(1,[a[@"createdAt"] doubleValue])],@"appleFallback":@YES}];
+    }
+    return rows;
+}
 static NSDictionary *Task(id params){if(![params isKindOfClass:NSDictionary.class])return nil;id t=params[@"task"];if([t isKindOfClass:NSString.class]&&[t length]<65536)t=[NSJSONSerialization JSONObjectWithData:[t dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil];return [t isKindOfClass:NSDictionary.class]?t:nil;}
 static void EnsurePendingOfficialCreates(void){
     if(PendingOfficialCreates)return;PendingOfficialCreates=[NSMutableArray array];AppleTodoSourcesInFlight=[NSMutableSet set];NSUserDefaults *defaults=NSUserDefaults.standardUserDefaults;
@@ -735,7 +754,7 @@ void TIOInstallTodoRuntime(void){
         PriorMethod(plugin,NSSelectorFromString(@"handleMethodCall:result:"),call,[^(id result){dispatch_async(dispatch_get_main_queue(),^{BOOL ok=![result isKindOfClass:NSClassFromString(@"FlutterError")];if([result isKindOfClass:NSDictionary.class]&&result[@"success"])ok=ok&&[result[@"success"] boolValue];completion(ok);});} copy]);
     });
     if(!CompletionForegroundObserver)CompletionForegroundObserver=[NSNotificationCenter.defaultCenter addObserverForName:UIApplicationDidBecomeActiveNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *notification){dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(0.35*NSEC_PER_SEC)),dispatch_get_main_queue(),^{[AppleCompletionRetryAt removeAllObjects];[AppleCompletionRetryCount removeAllObjects];[CompletionTitleFailures removeAllObjects];ProcessPendingAppleCompletions();});}];
-    dispatch_async(dispatch_get_main_queue(),^{ContinueAppleCompletionQueue();});
+    dispatch_async(dispatch_get_main_queue(),^{ContinueAppleCompletionQueue();LoadAppleTodoFallback();});
 }
 @interface TIOTodoRuntimePanel:UITableViewController
 @property(nonatomic,strong) NSTimer *mirrorRefreshTimer;
@@ -745,11 +764,13 @@ static NSString *FriendlySyncStatus(NSString *status,BOOL matching){
 }
 @implementation TIOTodoRuntimePanel
 - (void)viewDidLoad{[super viewDidLoad];EnsurePendingOfficialCreates();CompletionLedger();self.title=@"待办同步";RuntimePanel=self;self.navigationItem.rightBarButtonItem=[[UIBarButtonItem alloc]initWithTitle:@"重试同步" style:UIBarButtonItemStylePlain target:self action:@selector(refresh)];}
-- (void)viewDidAppear:(BOOL)animated{[super viewDidAppear:animated];dispatch_async(dispatch_get_main_queue(),^{ProcessPendingAppleCompletions();TIOTodoMirrorRefresh();});__weak typeof(self) weakSelf=self;self.mirrorRefreshTimer=[NSTimer scheduledTimerWithTimeInterval:2 repeats:YES block:^(NSTimer *timer){[weakSelf.tableView reloadData];}];}
+- (void)viewDidAppear:(BOOL)animated{[super viewDidAppear:animated];dispatch_async(dispatch_get_main_queue(),^{ProcessPendingAppleCompletions();TIOTodoMirrorRefresh();LoadAppleTodoFallback();});__weak typeof(self) weakSelf=self;self.mirrorRefreshTimer=[NSTimer scheduledTimerWithTimeInterval:2 repeats:YES block:^(NSTimer *timer){[weakSelf.tableView reloadData];}];}
 - (void)viewDidDisappear:(BOOL)animated{[super viewDidDisappear:animated];[self.mirrorRefreshTimer invalidate];self.mirrorRefreshTimer=nil;}
-- (void)refresh{EnsurePendingOfficialCreates();if(Snapshot&&Device.length)ReconcileOfficialCreates(Snapshot,Device,YES);[AppleCompletionRetryAt removeAllObjects];[AppleCompletionRetryCount removeAllObjects];[CompletionTitleFailures removeAllObjects];[UnlinkedCompletionRecoverySuppressed removeAllObjects];for(NSString *source in CompletionLedger().pendingSources)[CompletionLedger() resetConfirmationPresentation:source];ProcessPendingAppleCompletions();TIOTodoMirrorRefresh();[self.tableView reloadData];}
+- (void)refresh{EnsurePendingOfficialCreates();if(Snapshot&&Device.length)ReconcileOfficialCreates(Snapshot,Device,YES);[AppleCompletionRetryAt removeAllObjects];[AppleCompletionRetryCount removeAllObjects];[CompletionTitleFailures removeAllObjects];[UnlinkedCompletionRecoverySuppressed removeAllObjects];for(NSString *source in CompletionLedger().pendingSources)[CompletionLedger() resetConfirmationPresentation:source];ProcessPendingAppleCompletions();TIOTodoMirrorRefresh();LoadAppleTodoFallback();[self.tableView reloadData];}
 - (BOOL)rowDone:(NSDictionary *)item{NSString *sourceID=QualifiedSource(Device,item[@"wireId"]);BOOL pending=sourceID&&[CompletionLedger() isPending:sourceID];return [item[@"status"] isEqual:@1]||pending;}
-- (NSArray<NSDictionary *> *)todoRows{NSArray *items=Snapshot[@"items"];NSArray *rows=TIOTodoMirrorDisplayRows(Device,[items isKindOfClass:NSArray.class]?items:@[]);NSMutableArray *open=[NSMutableArray new],*closed=[NSMutableArray new];for(NSDictionary *row in rows){if([self rowDone:row])[closed addObject:row];else [open addObject:row];}
+- (NSArray<NSDictionary *> *)todoRows{NSArray *items=Snapshot[@"items"];NSArray *rows=TIOTodoMirrorDisplayRows(Device,[items isKindOfClass:NSArray.class]?items:@[]);
+    if(!rows.count){rows=AppleTodoFallbackRows();if(!rows.count)LoadAppleTodoFallback();}
+    NSMutableArray *open=[NSMutableArray new],*closed=[NSMutableArray new];for(NSDictionary *row in rows){if([self rowDone:row])[closed addObject:row];else [open addObject:row];}
     // 新→旧：按 createTime 降序，最新待办显示在最上方；无时间戳的行保持相对顺序。
     NSComparator cmp=^NSComparisonResult(NSDictionary *a,NSDictionary *b){long long ta=[Text(a[@"createTime"]) longLongValue],tb=[Text(b[@"createTime"]) longLongValue];if(ta==tb)return NSOrderedSame;return ta>tb?NSOrderedAscending:NSOrderedDescending;};
     [open sortUsingComparator:cmp];[closed sortUsingComparator:cmp];
@@ -757,7 +778,7 @@ static NSString *FriendlySyncStatus(NSString *status,BOOL matching){
 - (NSArray<NSDictionary *> *)scheduleRows{return TIOAppleScheduleRows();}
 - (NSUInteger)pendingCompletionCount {return CompletionLedger().pendingCount;}
 - (NSInteger)tableView:(UITableView *)t numberOfRowsInSection:(NSInteger)s{return 1+self.todoRows.count+self.scheduleRows.count;}
-- (NSString *)tableView:(UITableView *)t titleForFooterInSection:(NSInteger)s{NSUInteger pending=[self pendingCompletionCount];NSString *message=AppCompletionState.length?AppCompletionState:(pending?@"有已完成待办尚未同步；可点“重试同步”，未关联事项需先选择对应苹果条目。":@"从 Turbo IO 当前完整待办列表和本 App 创建的日程读取事项。");return [NSString stringWithFormat:@"%@\n自动匹配：%@ · 待处理 %@ 条 · 待同步完成 %@ 条\n苹果写入：%@（成功 %@ / 失败 %@）\n“待办”清单与眼镜自动双向同步标题和完成状态。新增苹果事项会显示在眼镜与本页；点选已关联事项可完成或恢复。手机恢复运行、眼镜重连后会补同步。\n本 App 创建的日程：确认后完成配对的苹果提醒事项，日历事件保留。",message,FriendlySyncStatus(OfficialCreateMatchStatus,YES),@(PendingOfficialCreates.count),@(pending),FriendlySyncStatus(LastAppleTodoCreateStatus,NO),@(AppleTodoCreateSuccesses),@(AppleTodoCreateFailures)];}
+- (NSString *)tableView:(UITableView *)t titleForFooterInSection:(NSInteger)s{NSUInteger pending=[self pendingCompletionCount];NSString *message=AppCompletionState.length?AppCompletionState:(pending?@"有已完成待办尚未同步；可点“重试同步”，未关联事项需先选择对应苹果条目。":@"从手机 Apple 提醒事项「待办」清单读取；尚未收到眼镜官方待办列表时，本页直接显示苹果待办（新→旧）。");return [NSString stringWithFormat:@"%@\n自动匹配：%@ · 待处理 %@ 条 · 待同步完成 %@ 条\n苹果写入：%@（成功 %@ / 失败 %@）\n“待办”清单与眼镜自动双向同步标题和完成状态。新增苹果事项会显示在眼镜与本页；点选已关联事项可完成或恢复。手机恢复运行、眼镜重连后会补同步。\n本 App 创建的日程：确认后完成配对的苹果提醒事项，日历事件保留。",message,FriendlySyncStatus(OfficialCreateMatchStatus,YES),@(PendingOfficialCreates.count),@(pending),FriendlySyncStatus(LastAppleTodoCreateStatus,NO),@(AppleTodoCreateSuccesses),@(AppleTodoCreateFailures)];}
 - (UITableViewCell *)tableView:(UITableView *)t cellForRowAtIndexPath:(NSIndexPath *)ip{
     UITableViewCell *c=[[UITableViewCell alloc]initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:nil];c.detailTextLabel.numberOfLines=0;
     if(!ip.row){c.textLabel.text=State;c.detailTextLabel.text=[NSString stringWithFormat:@"当前待办 %@ 条 · 已关联 %@ 条 · 待配对 %@ 条\n完整列表 %@ 次（眼镜回传 %@ / App 下发 %@）\n最近写入：%@",@(self.todoRows.count),@(LinkedRowsInSnapshot),@(PendingOfficialCreates.count),@(Snapshots),@(InboundSnapshots),@(OutboundSnapshots),FriendlySyncStatus(LastAppleTodoCreateStatus,NO)];return c;}
