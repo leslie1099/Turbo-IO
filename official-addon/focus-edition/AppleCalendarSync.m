@@ -154,9 +154,31 @@ static EKCalendar *TodoReminderList(EKEventStore *store,NSString **failure){
     if(!selected){
         NSMutableArray<EKCalendar *> *matches=[NSMutableArray array];
         for(EKCalendar *list in lists)if([list.title isEqual:@"待办"])[matches addObject:list];
-        if(matches.count!=1){if(failure)*failure=matches.count?@"target_list_ambiguous":@"target_list_missing";return nil;}
-        selected=matches.firstObject;
+        if(matches.count>1){
+            // 多个同名清单：选第一个可写的，避免整个读取卡死。
+            for(EKCalendar *list in matches)if(list.allowsContentModifications){selected=list;break;}
+            if(!selected){if(failure)*failure=@"target_list_ambiguous";return nil;}
+        }else if(matches.count==1){
+            selected=matches.firstObject;
+        }else{
+            // 没有「待办」清单：自动创建一个，否则 Apple 待办永远读不到（不同步的根因）。
+            EKCalendar *created=[EKCalendar calendarForEntityType:EKEntityTypeReminder eventStore:store];
+            created.title=@"待办";
+            EKSource *source=store.defaultCalendarForNewReminders.source;
+            if(!source)for(EKSource *s in store.sources)if(s.sourceType==EKSourceTypeLocal){source=s;break;}
+            if(!source&&store.sources.count)source=store.sources.firstObject;
+            if(!source){if(failure)*failure=@"target_list_missing";return nil;}
+            created.source=source;
+            NSError *error=nil;
+            if([store saveCalendar:created commit:YES error:&error]){selected=created;}
+            else{
+                // 创建失败：回退系统默认提醒清单，保证读取链路仍可用。
+                selected=store.defaultCalendarForNewReminders;
+                if(!selected)for(EKCalendar *list in lists)if(list.allowsContentModifications){selected=list;break;}
+            }
+        }
     }
+    if(!selected){if(failure)*failure=@"target_list_missing";return nil;}
     if(!selected.allowsContentModifications){if(failure)*failure=@"target_list_read_only";return nil;}
     if(!selected.calendarIdentifier.length){if(failure)*failure=@"target_list_missing";return nil;}
     if(![saved isEqual:selected.calendarIdentifier]){[defaults setObject:selected.calendarIdentifier forKey:key];[defaults synchronize];}
@@ -192,9 +214,11 @@ void TIOAppleReadTodoList(void (^completion)(NSDictionary *)){
     if(!completion)return;EKEventStore *store=[EKEventStore new];
     ReminderAccess(store,^(BOOL granted){
         if(!granted){completion(@{@"status":@"permission_denied"});return;}
-        NSString *failure=nil;EKCalendar *list=TodoReminderList(store,&failure);
-        if(!list){completion(@{@"status":failure?:@"target_list_missing"});return;}
-        [store fetchRemindersMatchingPredicate:[store predicateForRemindersInCalendars:@[list]] completion:^(NSArray<EKReminder *> *items){dispatch_async(dispatch_get_main_queue(),^{
+        // 读取覆盖全部提醒清单，避免用户现有待办在“提醒事项”等其它清单时读不到。
+        // 写入仍走 TodoReminderList（自动创建/回退的目标清单）。
+        NSArray<EKCalendar *> *allLists=[store calendarsForEntityType:EKEntityTypeReminder];
+        if(!allLists.count){completion(@{@"status":@"target_list_missing"});return;}
+        [store fetchRemindersMatchingPredicate:[store predicateForRemindersInCalendars:allLists] completion:^(NSArray<EKReminder *> *items){dispatch_async(dispatch_get_main_queue(),^{
             if(!items){completion(@{@"status":@"fetch_failed"});return;}
             if(items.count>2000){completion(@{@"status":@"list_too_large"});return;}
             NSDictionary *defaults=NSUserDefaults.standardUserDefaults.dictionaryRepresentation;
@@ -206,7 +230,7 @@ void TIOAppleReadTodoList(void (^completion)(NSDictionary *)){
             NSMutableArray *rows=[NSMutableArray array];NSUInteger skipped=0;
             for(EKReminder *item in items){NSDictionary *row=TodoAppleRow(item);if(!row){skipped++;continue;}
                 NSMutableDictionary *copy=[row mutableCopy];copy[@"hasLink"]=@([linkedIDs containsObject:row[@"identifier"]]||([row[@"externalIdentifier"] length]&&[linkedExternal containsObject:row[@"externalIdentifier"]]));[rows addObject:copy];}
-            completion(@{@"status":@"ok",@"items":rows,@"unsupportedCount":@(skipped),@"calendarIdentifier":list.calendarIdentifier});
+            completion(@{@"status":@"ok",@"items":rows,@"unsupportedCount":@(skipped),@"calendarIdentifier":allLists.firstObject.calendarIdentifier});
         });}];
     });
 }
