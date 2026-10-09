@@ -55,10 +55,11 @@ static BOOL ValidApple(NSDictionary *r){return [r isKindOfClass:NSDictionary.cla
         }
         NSString *source=S(apple[@"sourceID"]);NSDictionary *original=nil;NSString *wire=nil;BOOL imported=NO;
         if(source.length){for(NSDictionary *row in rows){NSString *key=[NSString stringWithFormat:@"%@:%@",device,row[@"wireId"]];if([source isEqual:key]){original=row;wire=row[@"wireId"];break;}}
-            if(!original||self.records[source]||!TIOTodoEncodeStatusUpdate(original,[original[@"status"] integerValue],1)){
+            // 已有该 source 的记录（含正常匹配与保护场景）：一律交给 matches 分支处理，不在此重复。
+            if(self.records[source])continue;
+            if(!original||!TIOTodoEncodeStatusUpdate(original,[original[@"status"] integerValue],1)){
                 // sourceID 指向的官方行已不存在（如短信待办的 sms-* 本地源）：它不是官方行，
                 // 降级为本地导入，让该 Apple 待办进入 Ledger 并被推送到眼镜，而不是永久跳过。
-                if(self.records[source]&&!original)continue;
                 original=nil;wire=nil;
             }
         }
