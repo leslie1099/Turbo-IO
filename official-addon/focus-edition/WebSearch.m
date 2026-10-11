@@ -20,7 +20,7 @@ NSDictionary *TIOTodoCreateTool(void){return @{@"type":@"function",@"function":@
 NSString *TIOTodoToolTitle(NSString *arguments){
     if(![arguments isKindOfClass:NSString.class]||arguments.length>4000)return nil;
     id obj=[NSJSONSerialization JSONObjectWithData:[arguments dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil];
-    if(![obj isKindOfClass:NSDictionary.class]||[obj count]!=1)return nil;
+    if(![obj isKindOfClass:NSDictionary.class])return nil;
     NSString *title=Text(obj[@"title"]);if(title.length>240||[title rangeOfCharacterFromSet:NSCharacterSet.controlCharacterSet].location!=NSNotFound)return nil;
     title=[title stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];return title.length?title:nil;
 }
@@ -28,7 +28,7 @@ NSDictionary *TIOWebSearchTool(void){return @{@"type":@"function",@"function":@{
 NSString *TIOWebSearchQuery(NSString *arguments){
     if(![arguments isKindOfClass:NSString.class]||arguments.length>4000)return nil;
     id j=[NSJSONSerialization JSONObjectWithData:[arguments dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil];
-    if(![j isKindOfClass:NSDictionary.class]||[j count]!=1)return nil;
+    if(![j isKindOfClass:NSDictionary.class])return nil;
     NSString *q=Text(j[@"query"]);if(!q.length||q.length>400||[q rangeOfCharacterFromSet:NSCharacterSet.controlCharacterSet].location!=NSNotFound)return nil;
     q=[q stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
     // Defense in depth, not a complete private-data classifier.
@@ -61,7 +61,7 @@ NSDictionary *TIOWebSearchResults(NSData *data){return SearchResults(data,5,1500
 - (NSArray *)calls{NSMutableArray *a=[NSMutableArray new];for(NSNumber *i in [[_parts allKeys] sortedArrayUsingSelector:@selector(compare:)])[a addObject:[_parts[i] copy]];return a;}
 - (void)event{
     if(!_lines.count)return;NSString *raw=[_lines componentsJoinedByString:@"\n"];[_lines removeAllObjects];
-    if([raw isEqual:@"[DONE]"]){_failed=YES;return;} // A finish_reason is required before DONE.
+    if([raw isEqual:@"[DONE]"]){if(!_done)_done=YES;return;} // Tolerate providers that omit a trailing finish_reason chunk.
     id j=[NSJSONSerialization JSONObjectWithData:[raw dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil];
     if(![j isKindOfClass:NSDictionary.class]||j[@"error"]||![j[@"choices"] isKindOfClass:NSArray.class]){_failed=YES;return;}
     if(![j[@"choices"] count])return;id c=j[@"choices"][0];
@@ -78,7 +78,10 @@ NSDictionary *TIOWebSearchResults(NSData *data){return SearchResults(data,5,1500
         for(NSString *k in @[@"id",@"name",@"arguments"]){id v=[k isEqual:@"id"]?p[k]:f[k];if(v&&![v isKindOfClass:NSString.class]){_failed=YES;return;}NSMutableDictionary *dst=[k isEqual:@"id"]?call:call[@"function"];dst[k]=[Text(dst[k]) stringByAppendingString:Text(v)];if([dst[k] length]>([k isEqual:@"arguments"]?4000:200)){_failed=YES;return;}}
     }
     id reason=c[@"finish_reason"];if(!reason||reason==NSNull.null)return;
-    if(![@[@"stop",@"tool_calls"] containsObject:reason]||([reason isEqual:@"tool_calls"]!=(_parts.count>0))){_failed=YES;return;}
+    // Providers vary: tolerate "length" (truncation) as a normal completion.
+    if(![@[@"stop",@"tool_calls",@"length"] containsObject:reason]){_failed=YES;return;}
+    if([reason isEqual:@"tool_calls"]&&_parts.count==0){_failed=YES;return;}
+    if([reason isEqual:@"stop"]&&_parts.count>0){_failed=YES;return;}
     NSMutableSet *ids=[NSMutableSet new];for(NSDictionary *call in self.calls){NSString *ident=call[@"id"],*name=call[@"function"][@"name"],*args=call[@"function"][@"arguments"];BOOL valid=([name isEqual:@"web_search"]&&TIOWebSearchQuery(args))||([name isEqual:@"create_todo"]&&TIOTodoToolTitle(args))||([name isEqual:@"knowledge_query"]&&TIOKnowledgeArguments(args,NO))||([name isEqual:@"knowledge_query_status"]&&TIOKnowledgeArguments(args,YES));if(!ident.length||[ids containsObject:ident]||!valid){_failed=YES;return;}[ids addObject:ident];}
     if(_parts.count&&!_parts[@0]){_failed=YES;return;}_done=YES;
 }
