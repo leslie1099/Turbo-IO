@@ -11,7 +11,7 @@ static void (^Sender)(NSString *,NSData *,void (^)(BOOL));
 static NSString *MirrorDevice,*LastReadStatus=@"waiting_for_glasses";
 static NSArray *OfficialRows;
 static BOOL Fetching,RefreshAgain,Queued;
-static NSTimeInterval ReadAt;
+static NSTimeInterval ReadAt,ReadFailAt;
 static NSUInteger ReadCount,SendAttempts,SendSuccesses,SendFailures,AppleWrites,AppleWriteFailures,PhysicalChanges,BatchChanges,OperationReceipts,LastOperationSuccessCount,UnsupportedCount;
 static NSMutableDictionary *Submitted,*RetryAt;
 static NSMutableSet *InFlight;
@@ -34,10 +34,16 @@ static void Drain(void){
             TIOAppleBindTodoIdentity(source,r[@"apple"],^(NSDictionary *result){[InFlight removeObject:source];[Ledger boundSource:source result:result];if(![result[@"status"] isEqual:@"linked"])RetryAt[source]=@(NSDate.date.timeIntervalSince1970+20);SaveDiag();Schedule();});continue;}
         if(pending){[InFlight addObject:source];AppleWrites++;
             TIOAppleApplyTodoFields(source,pending[@"expected"],pending[@"fields"],^(NSDictionary *result){[InFlight removeObject:source];[Ledger finishAppleWrite:source pending:pending result:result];if(![@[@"updated",@"unchanged",@"conflict"] containsObject:result[@"status"]]){AppleWriteFailures++;RetryAt[source]=@(NSDate.date.timeIntervalSince1970+20);}SaveDiag();Schedule();});continue;}
-        if(!Sender||![TIOProtocolDevice() isEqual:MirrorDevice]||now-ReadAt>30||![LastReadStatus isEqual:@"ok"]||[Submitted[source] isEqual:r[@"revision"]])continue;
+        if(!Sender||![TIOProtocolDevice() isEqual:MirrorDevice]||[Submitted[source] isEqual:r[@"revision"]])continue;
+        // 补推增强：Apple 读取超过 120s 或上次读取瞬时失败时，先立即补读（60s 冷却），
+        // 读取回来后 Ledger 新增/变化的行马上推眼镜，而不是长时间卡住不推。
+        if(now-ReadAt>120||(![LastReadStatus isEqual:@"ok"]&&![LastReadStatus isEqual:@"permission_denied"])){
+            if(now-ReadFailAt>60)TIOTodoMirrorRefresh();
+            continue;
+        }
         NSData *payload=TIOTodoEncodeStatusUpdate(r[@"row"],[r[@"row"][@"status"] integerValue],(NSInteger)now);if(!payload)continue;
         [InFlight addObject:source];NSString *revision=r[@"revision"];SendAttempts++;SaveDiag();
-        __block BOOL finished=NO;void(^finish)(BOOL)=^(BOOL submitted){if(finished)return;finished=YES;[InFlight removeObject:source];if(submitted){Submitted[source]=revision;SendSuccesses++;}else{SendFailures++;RetryAt[source]=@(NSDate.date.timeIntervalSince1970+10);}SaveDiag();Schedule();};
+        __block BOOL finished=NO;void(^finish)(BOOL)=^(BOOL submitted){if(finished)return;finished=YES;[InFlight removeObject:source];if(submitted){Submitted[source]=revision;SendSuccesses++;}else{SendFailures++;RetryAt[source]=@(NSDate.date.timeIntervalSince1970+5);}SaveDiag();Schedule();};
         Sender(MirrorDevice,payload,finish);
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW,10*NSEC_PER_SEC),dispatch_get_main_queue(),^{finish(NO);});
         // Serialize Bluetooth writes. A receipt for a bulk operation is not a
@@ -60,7 +66,14 @@ void TIOTodoMirrorRefresh(void){
                 if(sources.count==1)copy[@"sourceID"]=sources.firstObject;
                 if(sources.count>1)copy[@"hasLink"]=@YES;[apple addObject:copy];
             }
-            [Ledger reconcileApple:apple officialRows:OfficialRows device:device now:NSDate.date.timeIntervalSince1970];ReadAt=NSDate.date.timeIntervalSince1970;UnsupportedCount=[result[@"unsupportedCount"] unsignedIntegerValue];Drain();
+            [Ledger reconcileApple:apple officialRows:OfficialRows device:device now:NSDate.date.timeIntervalSince1970];ReadAt=NSDate.date.timeIntervalSince1970;ReadFailAt=0;UnsupportedCount=[result[@"unsupportedCount"] unsignedIntegerValue];Drain();
+        }else if([LastReadStatus isEqual:@"permission_denied"]){
+            // 权限未授权：不自动重试，等用户在设置里授权（面板有提示）。
+            ReadFailAt=NSDate.date.timeIntervalSince1970;
+        }else{
+            // 瞬时读取失败：2 秒后快速重试，避免漏推窗口被拉长。
+            ReadFailAt=NSDate.date.timeIntervalSince1970;
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(2*NSEC_PER_SEC)),dispatch_get_main_queue(),^{TIOTodoMirrorRefresh();});
         }
         SaveDiag();if(RefreshAgain){RefreshAgain=NO;Schedule();}
     });
@@ -89,7 +102,9 @@ void TIOTodoMirrorObserveOutgoing(NSDictionary *args){
 static void Varint(NSMutableData *out,uint64_t v){while(v>=128){uint8_t b=(v&127)|128;[out appendBytes:&b length:1];v>>=7;}uint8_t b=v;[out appendBytes:&b length:1];}
 static NSData *Packet(NSInteger type,NSDictionary *body){NSData *json=[NSJSONSerialization dataWithJSONObject:body options:0 error:nil];if(!json)return nil;NSMutableData *out=[NSMutableData dataWithBytes:"\x08\x01\x10" length:3];Varint(out,type);uint8_t tag=26;[out appendBytes:&tag length:1];Varint(out,json.length);[out appendData:json];return out;}
 NSDictionary *TIOTodoMirrorProjection(NSDictionary *arguments){
-    if(!NSThread.isMainThread||![arguments[@"businessId"] isEqual:@22]||![arguments[@"deviceId"] isEqual:MirrorDevice]||![LastReadStatus isEqual:@"ok"]||NSDate.date.timeIntervalSince1970-ReadAt>30)return nil;
+    if(!NSThread.isMainThread||![arguments[@"businessId"] isEqual:@22]||![arguments[@"deviceId"] isEqual:MirrorDevice]||![LastReadStatus isEqual:@"ok"]||NSDate.date.timeIntervalSince1970-ReadAt>120)return nil;
+    // 补推增强：窗口过期时异步补读（60s 冷却），下一条消息即可注入 Ledger 行到眼镜。
+    if(NSDate.date.timeIntervalSince1970-ReadAt>120&&NSDate.date.timeIntervalSince1970-ReadFailAt>60)TIOTodoMirrorRefresh();
     return TIOTodoOverlaySnapshot(Bytes(arguments[@"payload"]),[Ledger recordsForDevice:MirrorDevice],(NSInteger)NSDate.date.timeIntervalSince1970);
 }
 void TIOTodoMirrorProjectionSubmitted(NSDictionary *projection,BOOL success){
@@ -103,6 +118,11 @@ NSDictionary *TIOTodoMirrorRouteEvent(NSDictionary *event){
     NSString *device=Text(message[@"deviceId"]);NSDictionary *envelope=TIOTodoEnvelope(Bytes(message[@"payload"]));if(!device.length||!envelope)return event;
     // The Flutter engine invokes this callback on its platform/main thread.
     if(!NSThread.isMainThread)return event;
+    // 补推增强：收到任何待办蓝牙事件先补读 Apple（60s 冷却），后台唤醒时能立即续推。
+    {
+        NSTimeInterval now=NSDate.date.timeIntervalSince1970;
+        if(now-ReadFailAt>60&&(now-ReadAt>30||(![LastReadStatus isEqual:@"ok"]&&![LastReadStatus isEqual:@"permission_denied"])))TIOTodoMirrorRefresh();
+    }
     NSDictionary *physical=TIOTodoPhysicalStatus(event);
     if(physical){BOOL handled=[Ledger observeStatus:[physical[@"status"] integerValue] wire:physical[@"wireId"] device:device];if(handled){PhysicalChanges++;Drain();Schedule();SaveDiag();}
         if([Ledger ownsWire:physical[@"wireId"] device:device])return nil;return event;}
