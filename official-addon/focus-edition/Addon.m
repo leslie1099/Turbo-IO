@@ -32,6 +32,12 @@
 #import "NavigationUI.h"
 #import "SubtitleHUD.h"
 #import "VoiceTTS.h"
+#import "CloudSubtitle.h"
+#import "ReminderVoice.h"
+#import "TicketTrip.h"
+#import "FindPhone.h"
+#import "LanguageCards.h"
+#import "PixelAnim.h"
 #if TIO_IMAGE_RX_LAB
 #import "ImageUploadUI.h"
 #if TIO_DISPLAY_PHONE
@@ -466,6 +472,12 @@ static void AlwaysOnHook(id self,SEL cmd,id value) {
     if([r[@"key"] isEqual:@"ttsKey"]){[self configureTTS];return;}
     if([r[@"key"] isEqual:@"ttsTest"]){[self testTTS];return;}
     if([r[@"key"] isEqual:@"glassesLog"]){[self.navigationController pushViewController:TIOGlassesLogController() animated:YES];return;}
+    if([r[@"key"] isEqual:@"cloudSubtitle"]){[self.navigationController pushViewController:TIOCloudSubtitleController() animated:YES];return;}
+    if([r[@"key"] isEqual:@"reminderVoice"]){[self.navigationController pushViewController:TIOReminderVoiceController() animated:YES];return;}
+    if([r[@"key"] isEqual:@"ticketTrip"]){[self.navigationController pushViewController:TIOTicketTripController() animated:YES];return;}
+    if([r[@"key"] isEqual:@"findPhone"]){[self.navigationController pushViewController:TIOFindPhoneController() animated:YES];return;}
+    if([r[@"key"] isEqual:@"languageCards"]){[self.navigationController pushViewController:TIOLanguageCardsController() animated:YES];return;}
+    if([r[@"key"] isEqual:@"pixelAnim"]){[self.navigationController pushViewController:TIOPixelAnimController() animated:YES];return;}
     if([@[@"thinking",@"search",@"exit",@"capture",@"tts"] containsObject:r[@"key"]])return;
     NSInteger section=[r[@"section"] integerValue],row=[r[@"row"] integerValue];
     if(section>=0){[self legacySelect:tableView at:[NSIndexPath indexPathForRow:row inSection:section]];return;}
