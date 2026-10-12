@@ -45,7 +45,7 @@ static NSString *CurrentImportedKind(void){
             dispatch_async(dispatch_get_main_queue(),^{self.busy=NO;self.statusText=any?[out stringByAppendingString:@"未开放下载，未授权刷写。"]:(out.length?out:@"无内置固件候选；可从“文件”导入 ZIP。");[self.tableView reloadData];});});return;
     }
     if(candidates.count){self.busy=YES;self.statusText=@"正在重新核对已保存的固件副本…";dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED,0),^{NSMutableString *out=[NSMutableString new];BOOL all=YES;
-        for(NSURL *f in candidates){NSError *error=nil;NSDictionary *r=TIOReadExperimentalOTA(f,&error);if(!r)all=NO;[out appendFormat:@"%@：%@\n",[f.lastPathComponent substringToIndex:8],r?@"完整 SHA-256 复核通过":[error.localizedDescription?:@"校验失败"]];}
+        for(NSURL *f in candidates){NSError *error=nil;NSDictionary *r=TIOReadExperimentalOTA(f,&error);if(!r)all=NO;[out appendFormat:@"%@：%@\n",[f.lastPathComponent substringToIndex:8],r?@"完整 SHA-256 复核通过":(error.localizedDescription?:@"校验失败")];}
         dispatch_async(dispatch_get_main_queue(),^{self.busy=NO;self.statusText=all?[out stringByAppendingString:@"未发送、未安装；不会自动启动升级。"]:out;[self.tableView reloadData];});});}
 }
 - (void)refresh{TIORefreshExperimentalOTAReport();[self.tableView reloadData];}
