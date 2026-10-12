@@ -21,7 +21,13 @@
 #endif
 BOOL TIOOTAFileCallBlocked(NSString *method,BOOL scopedImage,NSUInteger stage){
     if(![method isKindOfClass:NSString.class])return YES;
-    if([method isEqual:@"rayneonet_sendFile"]&&scopedImage&&stage==0)return NO;
+    // No active OTA session: never block file transport. The official
+    // teleprompter manuscript transfer uses rayneonet_sendFile too, and the
+    // blanket "sendfile" filter silently killed it (后台传输文稿失败).
+    // OTA transfers use business 9 frames, not sendFile, so releasing the
+    // idle path does not open the firmware door.
+    if(stage==0)return NO;
+    if([method isEqual:@"rayneonet_sendFile"]&&scopedImage)return NO;
     NSString *lower=method.lowercaseString;
     return [lower containsString:@"sendfile"]||[lower containsString:@"ota"]||[lower containsString:@"upgrade"];
 }
