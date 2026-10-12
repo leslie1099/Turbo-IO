@@ -129,7 +129,7 @@ static void TranslateText(NSString *text,NSString *target,void (^done)(NSString 
     SubtitleState=@"正在准备录音…";
     NSError *sessionError=nil;
     AVAudioSession *session=[AVAudioSession sharedInstance];
-    [session setCategory:AVAudioSessionCategoryRecord withOptions:AVAudioSessionCategoryOptionDuckOthers error:&sessionError];
+    [session setCategory:AVAudioSessionCategoryPlayAndRecord withOptions:AVAudioSessionCategoryOptionDefaultToSpeaker|AVAudioSessionCategoryOptionDuckOthers error:&sessionError];
     [session setActive:YES error:&sessionError];
     _stopping=NO;_processing=NO;_peak=0;
     [self recordNextChunk];
