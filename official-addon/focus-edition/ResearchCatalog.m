@@ -15,7 +15,7 @@ NSArray<NSDictionary *> *LegacySections(NSString *page){
         @{@"title":@"录音与整理",@"rows":@[Row(@"recordings",@"录音与文件分享",@"waveform",-1,0),Row(@"summary",@"转写文字整理",@"text.badge.star",-1,1)]},
         @{@"title":@"全天智记",@"rows":@[Row(@"lifelogText",@"已保存文字",@"doc.text",-1,2),Row(@"lifelogAudio",@"音频保存与分享",@"waveform.circle",-1,3),Row(@"capture",@"保存之后的最终文字",@"square.and.arrow.down",1,0),Row(@"archive",@"导出文字归档",@"square.and.arrow.up",1,1)]},
         @{@"title":@"新功能",@"rows":@[Row(@"cloudSubtitle",@"云端字幕 · 麦克风",@"captions.bubble",-2,30),Row(@"reminderVoice",@"定时提醒 · 语音",@"alarm",-2,31),Row(@"ticketTrip",@"车票行程",@"ticket",-2,32),Row(@"findPhone",@"找手机",@"iphone.radiowaves.left.and.right",-2,33),Row(@"languageCards",@"语言学习",@"character.book.closed",-2,34),Row(@"pixelAnim",@"像素动画",@"square.grid.3x3",-2,35)]}];
-    ];    if([page isEqual:@"diagnostics"])return @[
+    if([page isEqual:@"diagnostics"])return @[
         @{@"title":@"开发者诊断",@"rows":@[Row(@"diagnosticsRuntime",@"眼镜运行状态 · TDG1",@"gauge.with.dots.needle.67percent",-2,21)]},
         @{@"title":@"运行状态",@"rows":@[Row(@"status",@"适配与回调",@"checkmark.shield",2,0),Row(@"glassesLog",@"眼镜日志 · 仅本机",@"doc.text.magnifyingglass",-2,3)]},
         @{@"title":@"手动测试",@"rows":@[Row(@"a2ui",@"自定义 UI 真机验收",@"rectangle.3.group",-2,2),Row(@"apiTest",@"测试模型接口",@"bubble.left.and.bubble.right",0,2),Row(@"searchTest",@"测试联网搜索",@"globe",0,9),Row(@"todoTest",@"待办同步",@"checklist",0,10)]},
