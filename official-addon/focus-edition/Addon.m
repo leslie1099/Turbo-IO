@@ -585,6 +585,9 @@ __attribute__((constructor)) static void Load(void) {
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW,6*NSEC_PER_SEC),dispatch_get_main_queue(),^{@try{id cls=NSClassFromString(@"TOLyricsFollow");id obj=((id(*)(id,SEL))objc_msgSend)(cls,NSSelectorFromString(@"shared"));((void(*)(id,SEL))objc_msgSend)(obj,NSSelectorFromString(@"start"));}@catch(NSException *e){}});
             // 短信转待办：快捷指令转发入口 + 官方建议卡点头/摇头确认。随 App 启动常驻监听。
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW,8*NSEC_PER_SEC),dispatch_get_main_queue(),^{@try{id cls=NSClassFromString(@"TOSmsTodoCore");id obj=((id(*)(id,SEL))objc_msgSend)(cls,NSSelectorFromString(@"shared"));((void(*)(id,SEL))objc_msgSend)(obj,NSSelectorFromString(@"start"));}@catch(NSException *e){}});
+            // 无声音频后台保活：iOS 判定 App 正在播放音频则不挂起，蓝牙连接与本地 60123 服务保持活跃。
+            // 副作用：控制中心出现"正在播放"图标；静音音频耗电极小。若雷鸟语音助手录音异常可在此停用。
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW,10*NSEC_PER_SEC),dispatch_get_main_queue(),^{@try{id cls=NSClassFromString(@"TOKeepAliveAudio");id obj=((id(*)(id,SEL))objc_msgSend)(cls,NSSelectorFromString(@"shared"));((void(*)(id,SEL))objc_msgSend)(obj,NSSelectorFromString(@"start"));}@catch(NSException *e){}});
             TIOOTAFlashDisableAutoUpdateIfRequested();
             // Explicit developer launch, not a stored preference or automatic restore.
             // armArchive additionally requires the installed preparation interlock.
