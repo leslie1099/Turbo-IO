@@ -19,6 +19,7 @@ static void VoiceLogAdd(NSString *line){
 @property(nonatomic,strong) AVAudioRecorder *recorder;
 @property(nonatomic,copy) NSString *path;
 @property(nonatomic,assign) BOOL busy;
+- (void)record;
 @end
 @implementation TIOReminderVoiceEngine
 + (instancetype)shared{static TIOReminderVoiceEngine *one=nil;static dispatch_once_t once;dispatch_once(&once,^{one=[TIOReminderVoiceEngine new];});return one;}

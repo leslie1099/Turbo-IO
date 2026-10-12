@@ -25,7 +25,7 @@ static NSString *SubtitleKey(void){
     return [[NSString alloc]initWithData:CFBridgingRelease(out) encoding:NSUTF8StringEncoding]?:@"";
 }
 
-static NSDictionary *SubtitleStatus(void){return @{@"running":@([[[NSUserDefaults standardUserDefaults] boolForKey:kCloudSubtitleRunning]]),@"translate":@([[[NSUserDefaults standardUserDefaults] boolForKey:kCloudSubtitleTranslate]]),@"target":[[NSUserDefaults standardUserDefaults] stringForKey:kCloudSubtitleTarget]?:@"简体中文"};}
+static NSDictionary *SubtitleStatus(void){return @{@"running":@([[NSUserDefaults standardUserDefaults] boolForKey:kCloudSubtitleRunning]),@"translate":@([[NSUserDefaults standardUserDefaults] boolForKey:kCloudSubtitleTranslate]),@"target":[[NSUserDefaults standardUserDefaults] stringForKey:kCloudSubtitleTarget]?:@"简体中文"};}
 static NSString *SubtitleState=@"未开始";
 static NSMutableArray *SubtitleLog;
 
@@ -88,7 +88,7 @@ void TIOCloudSubtitleChat(NSString *prompt,void (^done)(NSString *answer,NSStrin
     if(!prompt.length){done(nil,nil);return;}
     NSString *url=ChatURL(),*key=SubtitleKey(),*model=SubtitleModel();
     if(!url.length||!key.length){done(nil,@"未配置模型接口密钥：请在“模型与接口”配置硅基流动 Key 与 endpoint。");return;}
-    NSDictionary *payload=TIOChatRequestWithHistory(model,prompt,nil);
+    NSDictionary *payload=TIOChatRequestWithHistory(model,prompt,@[]);
     if(!payload){done(nil,@"请求参数错误");return;}
     NSMutableURLRequest *req=[NSMutableURLRequest requestWithURL:[NSURL URLWithString:url]];
     req.HTTPMethod=@"POST";
@@ -119,6 +119,8 @@ static void TranslateText(NSString *text,NSString *target,void (^done)(NSString 
 @property(nonatomic,assign) float peak;
 @property(nonatomic,assign) BOOL stopping,processing;
 @property(nonatomic,strong) NSDate *lastShownAt;
+- (void)begin;
+- (void)stop;
 @end
 @implementation TIOCloudSubtitleEngine
 + (instancetype)shared{static TIOCloudSubtitleEngine *one=nil;static dispatch_once_t once;dispatch_once(&once,^{one=[TIOCloudSubtitleEngine new];});return one;}
