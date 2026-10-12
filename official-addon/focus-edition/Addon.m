@@ -478,6 +478,7 @@ static void AlwaysOnHook(id self,SEL cmd,id value) {
     if([r[@"key"] isEqual:@"findPhone"]){[self.navigationController pushViewController:TIOFindPhoneController() animated:YES];return;}
     if([r[@"key"] isEqual:@"languageCards"]){[self.navigationController pushViewController:TIOLanguageCardsController() animated:YES];return;}
     if([r[@"key"] isEqual:@"pixelAnim"]){[self.navigationController pushViewController:TIOPixelAnimController() animated:YES];return;}
+    if([r[@"key"] isEqual:@"clipboardRelay"]){[self.navigationController pushViewController:TIOClipboardRelayController() animated:YES];return;}
     if([@[@"thinking",@"search",@"exit",@"capture",@"tts"] containsObject:r[@"key"]])return;
     NSInteger section=[r[@"section"] integerValue],row=[r[@"row"] integerValue];
     if(section>=0){[self legacySelect:tableView at:[NSIndexPath indexPathForRow:row inSection:section]];return;}
