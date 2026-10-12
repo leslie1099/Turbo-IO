@@ -19,6 +19,13 @@ export function validateOptions(o) {
   if(o['experimental-ota']!==undefined&&(!['R3','TNV1','TMU1','TFP1'].includes(o['experimental-ota'])||o.bundle!=='com.rayneo.venus.pub'))throw Error('invalid_experimental_ota_target');
   if(['TNV1','TMU1','TFP1'].includes(o['experimental-ota']) && (typeof o.firmware!=='string'||!path.isAbsolute(o.firmware)))throw Error('research_requires_explicit_firmware');
   if(o.firmware && !['TNV1','TMU1','TFP1'].includes(o['experimental-ota']))throw Error('unexpected_firmware');
+  if(o['firmware-stock']!==undefined){
+    if(typeof o['firmware-stock']!=='string'||!path.isAbsolute(o['firmware-stock']))throw Error('stock_firmware_requires_absolute_path');
+    if(o['experimental-ota']!=='TFP1')throw Error('stock_firmware_only_with_focus_tfp1');
+  }
+}
+export function validateStockFirmware(buf){
+  if(!Buffer.isBuffer(buf)||buf.length!==9223967||createHash('sha256').update(buf).digest('hex')!=='54eb155b1b9980c0334005c2051720879204b6b5448180ee594eb735b92e905a')throw Error('stock_firmware_identity_mismatch');
 }
 export function validateResearchPair(symbols, kind, firmware) {
   const native=symbols.includes('_TNVStart');
@@ -46,7 +53,7 @@ function main(){
   if(process.argv.includes('--help')){console.log('node official-addon/package.mjs --app /absolute/Runner.app --addon /absolute/TurboIOPrivateAddon.dylib --profile /absolute/profile.mobileprovision --identity CERTIFICATE_SHA1 --device YOUR_DEVICE_ID --out /absolute/new-private-output [--bundle com.rayneo.venus.pub] [--product iPhone18,4] [--amap-sdk-root /absolute/build/amap-sdk] [--experimental-ota R3|TNV1|TMU1 --firmware /absolute/matching-firmware.zip (required for TNV1/TMU1; HIGH RISK)]');return;}
   const o={bundle:'com.rayneo.venus.pub'};const args=process.argv.slice(2);
   if(args.length%2)throw Error('expected_named_arguments');
-  const seen=new Set();for(let i=0;i<args.length;i+=2){const k=args[i].slice(2);if(!args[i].startsWith('--')||!['app','addon','profile','identity','device','out','bundle','product','amap-sdk-root','experimental-ota','firmware','translation-module-dir','translation-models'].includes(k)||seen.has(k))throw Error('unknown_or_duplicate_argument');seen.add(k);o[k]=args[i+1];}
+  const seen=new Set();for(let i=0;i<args.length;i+=2){const k=args[i].slice(2);if(!args[i].startsWith('--')||!['app','addon','profile','identity','device','out','bundle','product','amap-sdk-root','experimental-ota','firmware','firmware-stock','translation-module-dir','translation-models'].includes(k)||seen.has(k))throw Error('unknown_or_duplicate_argument');seen.add(k);o[k]=args[i+1];}
   validateOptions(o);
   const mapResources=o['amap-sdk-root']?amapResources(o['amap-sdk-root']):[];
   const symbols=run('/usr/bin/nm',['-g',o.addon],{encoding:'utf8',maxBuffer:64*1024*1024});
@@ -91,6 +98,11 @@ print(json.dumps({'entitlements':p['Entitlements'],'expires':p['ExpirationDate']
     run('plutil',['-insert','TIOExperimentalOTAQueryRouting','-string',focusEdition?'ios105-tfp1-loopback-flash-gated':music?'ios105-tmu1-loopback-flash-gated':o['experimental-ota']==='TNV1'?'ios105-tnv1-loopback-flash-gated':'ios105-r3-loopback-flash-gated',plist]);
     run('plutil',['-insert','TIOExperimentalOTABuild','-string',focusEdition?'FOCUS-04-SOURCE':music?'TMU1-SOURCE-01':o['experimental-ota']==='TNV1'?'TNV1-SOURCE-01':'R3-SOURCE-RESEARCH-01',plist]);
     if(firmware)fs.writeFileSync(path.join(app,focusEdition?'TurboWeReadCandidate.zip':music?'TurboMusicCandidate.zip':'TurboNavigationCandidate.zip'),firmware,{flag:'wx'});
+    if(o['firmware-stock']){
+      const stock=fs.readFileSync(o['firmware-stock']);
+      validateStockFirmware(stock);
+      fs.writeFileSync(path.join(app,'StockCandidate.zip'),stock,{flag:'wx'});
+    }
     if(music){
       fs.copyFileSync(path.join(here,'music/Beans-MIT-LICENSE.txt'),path.join(app,'TurboMusic-Beans-MIT-LICENSE.txt'));
       const musicInfo=JSON.parse(run('plutil',['-convert','json','-o','-',plist],{encoding:'utf8'}));

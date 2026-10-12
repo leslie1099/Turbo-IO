@@ -4,6 +4,10 @@ NS_ASSUME_NONNULL_BEGIN
 NSDictionary<NSString *,NSData *> * _Nullable TIOCopyExperimentalOTAPayloads(NSURL *directory,NSError **error);
 // Fixed private TFP1 only. Integrity approval never means authorization to flash.
 FOUNDATION_EXPORT NSString *TIOExperimentalOTASHA(void);
+// Stock 1.0.4.12 original firmware archive (untouched payloads, repacked ZIP).
+FOUNDATION_EXPORT NSString *TIOStockOTASHA(void);
+// kind 识别：@"TFP1" / @"STOCK"，按导入 ZIP 的字节与 SHA 判定。
+FOUNDATION_EXPORT NSString * _Nullable TIOExperimentalOTAKind(NSData *data);
 FOUNDATION_EXPORT NSDictionary * _Nullable TIOCheckExperimentalOTA(NSData *data, NSError **error);
 FOUNDATION_EXPORT NSDictionary * _Nullable TIOReadExperimentalOTA(NSURL *file, NSError **error);
 FOUNDATION_EXPORT NSDictionary * _Nullable TIOImportExperimentalOTA(NSURL *source, NSURL *directory, NSError **error);

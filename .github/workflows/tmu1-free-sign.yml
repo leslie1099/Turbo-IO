@@ -32,6 +32,9 @@ jobs:
       ZIP_URL: 'https://github.com/Turbo1123/Turbo-IO/releases/download/firmware-strix-1.0.4.12-tfp1-focus04/StrixOS-1.0.4.12-TurboFocus-TFP1-FOCUS04-EXPERIMENTAL.zip'
       ZIP_SHA: 'ad5054e3d7bda90e94d293bea882bd8dd5a125bcc8f42c13a59b2e149313c9e3'
       ZIP_NAME: 'StrixOS-1.0.4.12-TurboFocus-TFP1-FOCUS04-EXPERIMENTAL.zip'
+      ZIP_STOCK_URL: 'https://github.com/Turbo1123/Turbo-IO/releases/download/stock-strix-1.0.4.12-archive/StrixOS-1.0.4.12-STOCK-PAYLOADS-REPACK.zip'
+      ZIP_STOCK_SHA: '54eb155b1b9980c0334005c2051720879204b6b5448180ee594eb735b92e905a'
+      ZIP_STOCK_NAME: 'StrixOS-1.0.4.12-STOCK-PAYLOADS-REPACK.zip'
       IPA_URL: 'https://github.com/Turbo1123/Turbo-IO/releases/download/rayneo-ios-1.0.5-201/RayNeo_AI_1.0.5_201_decrypted_original.ipa'
       IPA_SHA: '39d12aff8f2b312dc3b40ce784a444e52c536e61378434005255177548df966a'
       DEVICE_UDID: '00008150-000C745A1439401C'
@@ -54,6 +57,38 @@ jobs:
           echo "$ZIP_SHA  downloads/$ZIP_NAME" | shasum -a 256 -c -
           python3 firmware-research/strix-1.0.4.12/native-navigation/focus/verify.py \
             "downloads/$ZIP_NAME"
+
+      - name: 下载并校验原厂 1.0.4.12 归档固件（刷回原厂用）
+        run: |
+          curl -L --retry 3 -o "downloads/$ZIP_STOCK_NAME" "$ZIP_STOCK_URL"
+          echo "$ZIP_STOCK_SHA  downloads/$ZIP_STOCK_NAME" | shasum -a 256 -c -
+          python3 - <<'EOF'
+          import hashlib, zipfile
+          z = zipfile.ZipFile("downloads/StrixOS-1.0.4.12-STOCK-PAYLOADS-REPACK.zip")
+          names = sorted(z.namelist())
+          assert len(names)==15 and '__MACOSX' not in ' '.join(names), "stock payload count mismatch"
+          pins = {
+            "OtaFileInfo.json": "9cc71ebd4ec1434619638c49cee2f7089df239763f9fa1e87f081d78d3f5e997",
+            "cb_fw_venus.bin": "8799f12071bdac082218e3601c24ab0989275fc2f7db74e37b8314a225c2cf7d",
+            "fac_test_img.bin": "18eb0901c3e0daeae48dd5f015252b6931ea7368f0160c2c985c4e74296d17eb",
+            "images.bin": "192fefaa70545856884c89a9186e3f86d8f99a0738b201e116a11bc63011c158",
+            "lotties.bin": "ad66d83a3394034f825a12769aad292fc03e59fa865fe06bc43536b918a0b32b",
+            "nuttx_ap.bin": "53afdf5298815849eafca6f315a70606d2a605aff2e563f79050f797d615a988",
+            "nuttx_apc1.bin": "97d56ffc6dd575ad3d8bf7739d49e491ad7e4a959db8770b653f5302e171fb5c",
+            "nuttx_audio.bin": "549a72c032595e3829da7d63b7e1fd13cceda1a55dfefa7a7cad02db5a9b42ab",
+            "nuttx_bth.bin": "a8f4594868bffbd3bc08a38d1f3899571608e2d57869d147de3d06f3e4f7a12a",
+            "ota_installer_progress.bin": "6fd65d296a667e1a7d94ec129adfd26458a4008ef403b331f855192c36eb3e3f",
+            "pil_algo_up_demo_nand.dll": "e266726fe055ac6ec6f785a9440e8da7421402f2b4d3d7889039ad9b94e119c2",
+            "pil_algo_vad_demo.dll": "7ac5b5191202adea20c62642987fa0049024dde9c386ba6cd08a1f29ddd5c92c",
+            "pil_algo_wakeup_dll_nand.dll": "d1594cb8658b228e52c2606d02f1eab696d35a11ed42ddcb725e76a745f5550f",
+            "rives.bin": "836bc019f7152890b94cafafe2edaa024f317526318349f7833319e41158b104",
+            "smf.json": "2713dc3a302a65c101fa981500cd8b217766c526b6045bf02db5e9e6763d076d",
+          }
+          for n, h in pins.items():
+            data = z.read(n)
+            assert hashlib.sha256(data).hexdigest()==h, "stock payload hash mismatch: "+n
+          print("stock payloads: 15/15 verified")
+          EOF
 
       - name: 下载并校验原厂砸壳 IPA（353 MB）
         run: |
@@ -200,6 +235,7 @@ jobs:
             --amap-sdk-root "$(pwd)/official-addon/build/amap-sdk" \
             --experimental-ota TFP1 \
             --firmware "$(pwd)/downloads/$ZIP_NAME" \
+            --firmware-stock "$(pwd)/downloads/$ZIP_STOCK_NAME" \
             --out "$(pwd)/output"
 
       - name: 上传 IPA

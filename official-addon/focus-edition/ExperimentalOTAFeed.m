@@ -30,12 +30,25 @@ static void Reply(int fd,NSInteger status,NSData *body,NSString *mime,NSDictiona
     for(NSString *key in extra)[h appendFormat:@"%@: %@\r\n",key,extra[key]];
     [h appendString:@"\r\n"];if(SendAll(fd,[h dataUsingEncoding:NSUTF8StringEncoding])&&!head)SendAll(fd,body);
 }
+static NSURL *ImportedArchiveURL(void){
+    NSFileManager *fm=NSFileManager.defaultManager;
+    NSURL *dir=[NSURL fileURLWithPath:[NSHomeDirectory() stringByAppendingPathComponent:@"Library/Application Support/TurboIOPrivateAddon/ExperimentalOTA"] isDirectory:YES];
+    NSURL *newest=nil;NSDate *newestDate=nil;
+    for(NSString *sha in @[TIOExperimentalOTASHA(),TIOStockOTASHA()]){
+        NSURL *f=[dir URLByAppendingPathComponent:[sha stringByAppendingString:@".zip"]];
+        if(![fm fileExistsAtPath:f.path])continue;
+        NSDate *date=[[fm attributesOfItemAtPath:f.path error:nil] fileModificationDate];
+        if(date&&(!newestDate||[date compare:newestDate]==NSOrderedDescending)){newest=f;newestDate=date;}
+    }
+    if(newest){NSError *e=nil;if(TIOReadExperimentalOTA(newest,&e))return newest;}
+    return nil;
+}
 @implementation TIOExperimentalOTAFeed {
     dispatch_queue_t _queue;
     dispatch_source_t _listener;
     uint16_t _port;
     NSData *_archive;
-    NSString *_token, *_md5;
+    NSString *_kind, *_token, *_md5;
     NSTimeInterval _deadline;
     NSUInteger _queries, _downloads, _rejected;
     NSUInteger _firmwareQueries, _appQueries, _unknownQueries;
@@ -72,7 +85,7 @@ static void Reply(int fd,NSInteger status,NSData *body,NSString *mime,NSDictiona
     if(!TIOOTAPreparationProtected()&&!TIOOTAFlashProtected()){if(error)*error=FeedError(@"未确认发送保护，拒绝提供实验包。");return NO;}
 #endif
     if(!isfinite(seconds)||seconds<=0||seconds>900){if(error)*error=FeedError(@"授权有效期必须在 0 至 900 秒之间。");return NO;}
-    if(!TIOReadExperimentalOTA(url,error))return NO;
+    NSDictionary *verified=TIOReadExperimentalOTA(url,error);if(!verified)return NO;
     // Keep the verified exact bytes, so a later disk change cannot alter a reply.
     NSData *data=[NSData dataWithContentsOfURL:url options:0 error:error];
     if(!data||!TIOCheckExperimentalOTA(data,error))return NO;
@@ -83,12 +96,12 @@ static void Reply(int fd,NSInteger status,NSData *body,NSString *mime,NSDictiona
 #pragma clang diagnostic pop
     NSMutableString *digest=[NSMutableString new];for(NSUInteger i=0;i<sizeof(bytes);i++)[digest appendFormat:@"%02x",bytes[i]];
     @synchronized(self){if(!_listener){if(error)*error=FeedError(@"本机服务未启动。");return NO;}
-        _archive=data;_md5=digest;_token=[NSUUID.UUID.UUIDString stringByReplacingOccurrencesOfString:@"-" withString:@""];
+        _archive=data;_kind=[verified[@"kind"] copy];_md5=digest;_token=[NSUUID.UUID.UUIDString stringByReplacingOccurrencesOfString:@"-" withString:@""];
         _deadline=NSProcessInfo.processInfo.systemUptime+seconds;return YES;}
 #endif
 }
-- (void)expireLocked{if(_archive&&NSProcessInfo.processInfo.systemUptime>=_deadline){_archive=nil;_token=nil;_md5=nil;_deadline=0;}}
-- (void)disarm{@synchronized(self){_archive=nil;_token=nil;_md5=nil;_deadline=0;}}
+- (void)expireLocked{if(_archive&&NSProcessInfo.processInfo.systemUptime>=_deadline){_archive=nil;_kind=nil;_token=nil;_md5=nil;_deadline=0;}}
+- (void)disarm{@synchronized(self){_archive=nil;_kind=nil;_token=nil;_md5=nil;_deadline=0;}}
 - (void)stop{@synchronized(self){[self disarm];if(_listener){dispatch_source_cancel(_listener);_listener=nil;}_port=0;}}
 - (void)dealloc{if(_listener)dispatch_source_cancel(_listener);}
 - (NSDictionary *)status{@synchronized(self){[self expireLocked];return @{@"running":@(_listener!=nil),@"port":@(_port),@"armed":@(_archive!=nil),@"queryCount":@(_queries),@"firmwareQueries":@(_firmwareQueries),@"appQueries":@(_appQueries),@"unknownQueries":@(_unknownQueries),@"downloadRequests":@(_downloads),@"rejectedCount":@(_rejected),@"armingCompiledIn":@(TIO_OTA_FEED_ARMING_ENABLED),@"runtimeValidated":@NO};}}
@@ -110,7 +123,10 @@ static void Reply(int fd,NSInteger status,NSData *body,NSString *mime,NSDictiona
         else if([QueryPaths() containsObject:[[target componentsSeparatedByString:@"?"] firstObject]]){
             _queries++;id data=NSNull.null;
             NSString *kind=QueryKind(target);if([kind isEqual:@"firmware"])_firmwareQueries++;else if([kind isEqual:@"app"])_appQueries++;else _unknownQueries++;
-            if(_archive&&[kind isEqual:@"firmware"])data=@{@"taskName":@"Turbo WeRead TFP1 PRIVATE EXPERIMENT",@"appName":@"Strix OS",@"packageName":@"Strix OS",@"versionName":@"0100040012",@"versionCode":@100040012,@"upgradeType":@1,@"userScope":@0,@"updateDesc":@"PRIVATE EXPERIMENT: AP modified, other 13 payloads unchanged. Runtime unverified.",@"appIcon":@"",@"apkSize":@(_archive.length),@"apkMd5":_md5,@"downloadUrl":[NSString stringWithFormat:@"http://127.0.0.1:%u/p/%@/Strix_OS_1.0.4.12.zip",_port,_token]};
+            if(_archive&&[kind isEqual:@"firmware"]){
+                BOOL stock=[_kind isEqual:@"STOCK"];
+                data=@{@"taskName":stock?@"Stock 1.0.4.12 Original Firmware":@"Turbo WeRead TFP1 PRIVATE EXPERIMENT",@"appName":@"Strix OS",@"packageName":@"Strix OS",@"versionName":@"0100040012",@"versionCode":@100040012,@"upgradeType":@1,@"userScope":@0,@"updateDesc":stock?@"Stock 1.0.4.12 original payloads (restore official AP and manifest).":@"PRIVATE EXPERIMENT: AP modified, other 13 payloads unchanged. Runtime unverified.",@"appIcon":@"",@"apkSize":@(_archive.length),@"apkMd5":_md5,@"downloadUrl":[NSString stringWithFormat:@"http://127.0.0.1:%u/p/%@/Strix_OS_1.0.4.12.zip",_port,_token]};
+            }
             response=@{@"error_code":@1000,@"error_msg":@"success",@"data":data};
         }else if(_archive&&[target isEqual:[NSString stringWithFormat:@"/p/%@/Strix_OS_1.0.4.12.zip",_token]]){
             body=_archive;mime=@"application/zip";extra=@{@"Accept-Ranges":@"bytes"};
@@ -142,7 +158,8 @@ NSDictionary *TIOExperimentalOTAFeedStatus(void){
 BOOL TIOBeginExperimentalOTAPreparation(NSError **error){
     if(!TIOOTAPreparationProtected()&&!TIOOTAFlashProtected()){if(error)*error=FeedError(@"此包没有启用发送保护；未开放下载。");return NO;}
     NSURL *directory=[NSURL fileURLWithPath:[NSHomeDirectory() stringByAppendingPathComponent:@"Library/Application Support/TurboIOPrivateAddon/ExperimentalOTA"] isDirectory:YES];
-    NSURL *archive=[directory URLByAppendingPathComponent:[TIOExperimentalOTASHA() stringByAppendingString:@".zip"]];
+    NSURL *archive=ImportedArchiveURL();
+    if(!archive){if(error)*error=FeedError(@"未找到已导入的 TFP1 或原厂固件 ZIP；未开放下载。");return NO;}
     if(!TIOImportExperimentalOTA(archive,directory,error))return NO;
     BOOL ok=SharedFeed&&[SharedFeed armArchive:archive lifetime:900 error:error];TIORefreshExperimentalOTAReport();return ok;
 }
@@ -157,8 +174,8 @@ void TIORefreshExperimentalOTAReport(void){
         if([fm createDirectoryAtURL:directory withIntermediateDirectories:YES attributes:@{NSFilePosixPermissions:@0700} error:&error]&&[directory setResourceValue:@YES forKey:NSURLIsExcludedFromBackupKey error:&error]){
             NSMutableDictionary *report=[@{@"build":@"OTA-PREPARE-02",@"timestamp":@(NSDate.date.timeIntervalSince1970),@"feed":TIOExperimentalOTAFeedStatus(),@"guard":TIOOTAGuardStatus(),@"flashAuthorized":@NO,@"transferSessionBound":@NO} mutableCopy];
             if(TIOOTAFlashBuild()){report[@"build"]=@"DIAGNOSTICS-OTA-01";report[@"flashGate"]=TIOOTAFlashStatus();report[@"flashAuthorized"]=report[@"flashGate"][@"authorized"];}
-            NSURL *zip=[directory URLByAppendingPathComponent:[TIOExperimentalOTASHA() stringByAppendingString:@".zip"]];error=nil;
-            report[@"archive"]=TIOReadExperimentalOTA(zip,&error)?:@{@"integrityPassed":@NO};
+            NSURL *zip=ImportedArchiveURL();error=nil;
+            report[@"archive"]=zip?(TIOReadExperimentalOTA(zip,&error)?:@{@"integrityPassed":@NO}):@{@"integrityPassed":@NO};
             NSURL *official=[NSURL fileURLWithPath:[NSHomeDirectory() stringByAppendingPathComponent:@"Library/Application Support/ota/Strix_OS_1.0.4.12"] isDirectory:YES];error=nil;
             report[@"officialDirectory"]=TIOCheckExperimentalOTADirectory(official,&error)?:@{@"integrityPassed":@NO,@"note":error.localizedDescription?:@"尚未读取"};
             NSURL *file=[directory URLByAppendingPathComponent:@"preparation-status.json"];

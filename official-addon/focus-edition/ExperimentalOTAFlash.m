@@ -76,7 +76,7 @@ BOOL TIOPhoneOTAReadAllowed(NSData *data){
         // recovery loop can establish that no glasses transfer is active.
         if((t==1||t==2||t==11)&&empty)return YES;
         NSUInteger n=0;
-        if(t==3&&dict&&[j count]==1&&Number(j[@"OtaSize"],&n)&&n==9300112&&!binary.length)return YES;
+        if(t==3&&dict&&[j count]==1&&Number(j[@"OtaSize"],&n)&&(n==9300112||n==9223967)&&!binary.length)return YES;
         if(!_stage){if(t==4)_failure=@"TFP1 试刷尚未授权；开始指令未发送。请先在实验固件页完成 TFP1 风险确认。";return NO;}
         if(_stage==3||!isfinite(now)||now<0)return NO;
         if(_stage==1&&now>=_deadline){[self cancel];return NO;}
