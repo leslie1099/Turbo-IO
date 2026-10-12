@@ -4,7 +4,7 @@
 #import "MusicBridge.h"
 #import "ResearchUI.h"
 
-typedef NSArray<NSString *> *(^FrameGenerator)(NSUInteger frame);
+typedef NSArray<NSString *> *(*FrameGenerator)(NSUInteger frame);
 
 static NSArray<NSString *> *BounceFrame(NSUInteger f){
     // 弹珠：15×4 网格内反弹

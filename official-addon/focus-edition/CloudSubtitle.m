@@ -18,30 +18,30 @@ static NSString *const kCloudSubtitleTarget=@"io.turboio.subtitle.target";
 
 // ---- 钥匙串读取（与模型接口配置同一 service/account：endpoint URL）----
 static NSString *SubtitleKey(void){
-    NSString *endpoint=[NSUserDefaults standardUserDefaults stringForKey:@"endpoint"]?:@"";
+    NSString *endpoint=[[NSUserDefaults standardUserDefaults] stringForKey:@"endpoint"]?:@"";
     if(!endpoint.length)return @"";
     NSDictionary *q=@{(__bridge id)kSecClass:(__bridge id)kSecClassGenericPassword,(__bridge id)kSecAttrService:Domain,(__bridge id)kSecAttrAccount:endpoint,(__bridge id)kSecReturnData:@YES};
     CFTypeRef out=NULL;if(SecItemCopyMatching((__bridge CFDictionaryRef)q,&out)!=errSecSuccess)return @"";
     return [[NSString alloc]initWithData:CFBridgingRelease(out) encoding:NSUTF8StringEncoding]?:@"";
 }
 
-static NSDictionary *SubtitleStatus(void){return @{@"running":@([[NSUserDefaults standardUserDefaults boolForKey:kCloudSubtitleRunning]]),@"translate":@([[NSUserDefaults standardUserDefaults boolForKey:kCloudSubtitleTranslate]]),@"target":[NSUserDefaults standardUserDefaults stringForKey:kCloudSubtitleTarget]?:@"简体中文"};}
+static NSDictionary *SubtitleStatus(void){return @{@"running":@([[[NSUserDefaults standardUserDefaults] boolForKey:kCloudSubtitleRunning]]),@"translate":@([[[NSUserDefaults standardUserDefaults] boolForKey:kCloudSubtitleTranslate]]),@"target":[[NSUserDefaults standardUserDefaults] stringForKey:kCloudSubtitleTarget]?:@"简体中文"};}
 static NSString *SubtitleState=@"未开始";
 static NSMutableArray *SubtitleLog;
 
 // ---- 由用户已配 endpoint 推导硅基流动 host；Key 从钥匙串按 endpoint 读取 ----
 static NSString *ASRURL(void){
-    NSString *endpoint=[NSUserDefaults standardUserDefaults stringForKey:@"endpoint"]?:@"";
+    NSString *endpoint=[[NSUserDefaults standardUserDefaults] stringForKey:@"endpoint"]?:@"";
     NSURL *url=[NSURL URLWithString:endpoint];
     if(!url.scheme.length||!url.host.length)return @"";
     return [NSString stringWithFormat:@"%@://%@/v1/audio/transcriptions",url.scheme,url.host];
 }
 static NSString *ChatURL(void){
-    NSString *endpoint=[NSUserDefaults standardUserDefaults stringForKey:@"endpoint"]?:@"";
+    NSString *endpoint=[[NSUserDefaults standardUserDefaults] stringForKey:@"endpoint"]?:@"";
     NSURL *url=[NSURL URLWithString:endpoint];
     return url.scheme.length?endpoint:@"";
 }
-static NSString *SubtitleModel(void){return [NSUserDefaults standardUserDefaults stringForKey:@"model"]?:@"deepseek-ai/DeepSeek-V3.2";}
+static NSString *SubtitleModel(void){return [[NSUserDefaults standardUserDefaults] stringForKey:@"model"]?:@"deepseek-ai/DeepSeek-V3.2";}
 
 static void SubtitleLogAdd(NSString *line){
     static dispatch_once_t once;dispatch_once(&once,^{SubtitleLog=[NSMutableArray new];});
@@ -103,7 +103,7 @@ void TIOCloudSubtitleChat(NSString *prompt,void (^done)(NSString *answer,NSStrin
         NSString *content=choices.count?choices[0][@"message"][@"content"]:nil;
         if(![content isKindOfClass:NSString.class]){done(nil,@"返回异常；请检查 Key 余额");return;}
         done(content,nil);
-    }] resume;
+    }] resume];
 }
 static void TranslateText(NSString *text,NSString *target,void (^done)(NSString *translation,NSString *error)){
     if(!text.length){done(nil,nil);return;}
@@ -204,7 +204,7 @@ static void TranslateText(NSString *text,NSString *target,void (^done)(NSString 
         else if(ip.row==1){c.textLabel.text=@"翻译到镜片";UISwitch *sw=[UISwitch new];sw.on=[s[@"translate"] boolValue];[sw addTarget:self action:@selector(toggleTranslate:) forControlEvents:UIControlEventValueChanged];c.accessoryView=sw;}
         else if(ip.row==2){c.textLabel.text=[NSString stringWithFormat:@"目标语言 · %@",s[@"target"]];c.detailTextLabel.text=@"点击修改（如 英语/日语/粤语）";}
         else {c.textLabel.text=@"查看最近字幕";c.detailTextLabel.text=@"本机保留最近 50 条";}
-    }else if(ip.section==1){c.textLabel.text=SubtitleState;c.detailTextLabel.text=[NSString stringWithFormat:@"模式：%@ · %@",[SubtitleStatus()[@"translate"] boolValue]?@"识别+翻译":@"仅识别",SubtitleStatus()[@"running"] boolValue]?@"运行中":@"空闲"];}
+    }else if(ip.section==1){c.textLabel.text=SubtitleState;c.detailTextLabel.text=[NSString stringWithFormat:@"模式：%@ · %@",[SubtitleStatus()[@"translate"] boolValue]?@"识别+翻译":@"仅识别",[SubtitleStatus()[@"running"] boolValue]?@"运行中":@"空闲"];}
     else{c.textLabel.text=SubtitleLog[ip.row];}
     return c;
 }

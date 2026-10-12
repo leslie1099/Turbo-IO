@@ -112,7 +112,7 @@ static void VoiceLogAdd(NSString *line){
     else{c.textLabel.text=VoiceLog[ip.row];}
     return c;
 }
-- (void)tableView:(UITableView *)t didSelectRowAtIndexPath:(NSIndexPath *)ip{[t deselectRowAtIndexPath:ip animated:YES];if(ip.section==0){(TIOReminderVoiceEngine *)[TIOReminderVoiceEngine shared] record;}[t reloadData];}
+- (void)tableView:(UITableView *)t didSelectRowAtIndexPath:(NSIndexPath *)ip{[t deselectRowAtIndexPath:ip animated:YES];if(ip.section==0){[(TIOReminderVoiceEngine *)[TIOReminderVoiceEngine shared] record];}[t reloadData];}
 - (void)viewWillAppear:(BOOL)animated{[super viewWillAppear:animated];[self.tableView reloadData];}
 @end
 UIViewController *TIOReminderVoiceController(void){return [[TIOReminderVoicePanel alloc]initWithStyle:UITableViewStyleInsetGrouped];}
