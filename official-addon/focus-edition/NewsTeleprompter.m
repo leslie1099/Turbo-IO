@@ -149,7 +149,18 @@ static BOOL PrepareText(NSString *text,NSInteger speed,NSInteger mode){
     OwnPrepare=[j copy];OwnChecksum=TIONewsTeleChecksum(data);
     Note=mode==3?@"准备三段手动常亮稿，等待眼镜收稿；未开始显示":@"准备新闻稿，等待眼镜回应（未开始播放）";
     if(!Send(2,j)){ClearSession();Note=@"准备发送失败，未启动播放";Changed();return NO;}
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,30*NSEC_PER_SEC),dispatch_get_main_queue(),^{if(Epoch==epoch&&Owned&&!Ready){TIONewsTeleControl(6,Speed);Note=@"收稿确认超时，已请求退出；未自动重传";Changed();}});
+    __block NSUInteger retried=0;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,30*NSEC_PER_SEC),dispatch_get_main_queue(),^{
+        if(Epoch!=epoch||!Owned||Ready)return;
+        if(!retried){
+            retried=1;NSMutableDictionary *p=[OwnPrepare mutableCopy];
+            if(Send(2,p)){Note=@"眼镜未确认收稿，已自动重试传稿；请确认眼镜在官方提词器页面且蓝牙已连接";Changed();
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW,30*NSEC_PER_SEC),dispatch_get_main_queue(),^{
+                    if(Epoch==epoch&&Owned&&!Ready){TIONewsTeleControl(6,Speed);Note=@"再次收稿确认超时，已退出；请确认眼镜在提词器页面、蓝牙已连接后重发";Changed();}
+                });
+            }else{TIONewsTeleControl(6,Speed);Note=@"自动重试传稿发送失败，已退出；请检查连接后重发";Changed();}
+        }else{TIONewsTeleControl(6,Speed);Note=@"收稿确认超时且重试未成功，已退出；请确认眼镜在提词器页面后重发";Changed();}
+    });
     if(mode==3)dispatch_after(dispatch_time(DISPATCH_TIME_NOW,300*NSEC_PER_SEC),dispatch_get_main_queue(),^{if(Epoch==epoch&&Owned){TIONewsTeleControl(6,Speed);Note=@"5分钟测试保护到期，已请求退出；请核对镜片";Changed();}});
     Changed();return YES;
 }

@@ -70,7 +70,7 @@ void TIONewsConfigure(TIONewsFetch fetch){Fetch=[fetch copy];}
     _cancelFetch=Fetch(TIONewsPrompt(_topic,NSDate.date),^(NSString *text,NSString *error){typeof(self) self=weak;if(!self||token!=self.generation)return;self.busy=NO;self.cancelFetch=nil;
         if(error){self.status=error;[self.tableView reloadData];return;}
         if(!TIONewsPages(text).count){self.status=@"新闻为空或超过12000字符，未传稿";[self.tableView reloadData];return;}
-        self.text=[text stringByReplacingOccurrencesOfString:@"正在联网搜索…" withString:@""];if(![self saveCurrentNews]){self.status=@"新闻已获取，但本机保存失败或已达1000篇；未自动传稿，请先查看全文保存副本。";[self.tableView reloadData];return;}if([TIONewsTeleStatus()[@"available"] boolValue]){self.status=@"新闻已保存，准备发送到提词器";[self prepare];}else{self.status=@"新闻已保存在本机，眼镜连接可用后再发送。";[self.tableView reloadData];}
+        self.text=[text stringByReplacingOccurrencesOfString:@"正在联网搜索…" withString:@""];if(![self saveCurrentNews]){self.status=@"新闻已获取，但本机保存失败或已达1000篇；未自动传稿，请先查看全文保存副本。";[self.tableView reloadData];return;}if([TIONewsTeleStatus()[@"available"] boolValue]){self.status=@"新闻已保存，准备发送到提词器";[self prepare];}else{NSString *state=TIONewsTeleStatus()[@"state"]?:@"";self.status=[NSString stringWithFormat:@"新闻已保存在本机；提词通道未就绪：%@",state];[self.tableView reloadData];}
     });
 }
 - (void)prepare{
@@ -79,7 +79,7 @@ void TIONewsConfigure(TIONewsFetch fetch){Fetch=[fetch copy];}
     if(_busy||![TIONewsPresentation(TIONewsTeleStatus(),_busy,_text.length)[@"canSend"] boolValue])return;
     if(![self saveCurrentNews]){_status=@"本机保存失败，未传稿；手机正文仍可查看";[self.tableView reloadData];return;}
     _autoStart=YES;_readingArchiveID=_archiveID;_readOffset=0;
-    if(!TIONewsTelePrepare(body,_speed)){_autoStart=NO;_readingArchiveID=nil;_status=@"手机正文可读；提词器尚未准备，请查看通道状态";}
+    if(!TIONewsTelePrepare(body,_speed)){_autoStart=NO;_readingArchiveID=nil;NSString *state=TIONewsTeleStatus()[@"state"]?:@"";_status=[NSString stringWithFormat:@"传稿未开始：%@",state];}
     else _status=@"已请求传稿，收到业务确认后开始匀速播放";[self.tableView reloadData];
 }
 - (BOOL)saveCurrentNews{NSDictionary *existing=TIONewsArchiveLoad(_archiveID);NSDictionary *r=[existing[@"text"] isEqual:_text]?existing:TIONewsArchiveSave(_topic,_text);if(!r)return NO;_archiveID=r[@"id"];_savedCount=TIONewsArchiveList().count;[NSUserDefaults.standardUserDefaults setObject:_archiveID forKey:@"io.turboio.news.lastArchive"];return YES;}
