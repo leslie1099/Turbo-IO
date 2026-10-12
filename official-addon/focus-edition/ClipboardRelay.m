@@ -10,8 +10,8 @@ static NSString *LastPushed=nil;      // 上次推送的文本（去重）
 static NSDate *LastPushAt=nil;        // 上次推送时间（控制关闭时机）
 static NSTimer *PollTimer=nil;        // 前台轮询定时器
 
-BOOL TIOClipboardRelayEnabled(void){return [Prefs boolForKey:@"clipboardRelayEnabled"];}
-void TIOClipboardRelaySetEnabled(BOOL on){[Prefs setBool:on forKey:@"clipboardRelayEnabled"];}
+BOOL TIOClipboardRelayEnabled(void){return [[NSUserDefaults standardUserDefaults] boolForKey:@"clipboardRelayEnabled"];}
+void TIOClipboardRelaySetEnabled(BOOL on){[[NSUserDefaults standardUserDefaults] setBool:on forKey:@"clipboardRelayEnabled"];}
 
 static NSString *Trim(NSString *s){return [s stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];}
 
@@ -34,7 +34,7 @@ static void PushText(NSString *text){
 }
 
 static void PollClipboard(void){
-    NSString *now=UIPasteboard.general.string;
+    NSString *now=[UIPasteboard generalPasteboard].string;
     if(!now.length)return;
     NSString *delta=nil;
     if(LastClipboard.length&&[now hasPrefix:LastClipboard]&&now.length>LastClipboard.length){
@@ -82,7 +82,7 @@ static void EnsureTimer(void){
 }
 - (void)toggle:(UISwitch *)s{
     TIOClipboardRelaySetEnabled(s.on);
-    if(s.on){LastClipboard=UIPasteboard.general.string;EnsureTimer();}
+    if(s.on){LastClipboard=[UIPasteboard generalPasteboard].string;EnsureTimer();}
     else if(PollTimer){[PollTimer invalidate];PollTimer=nil;}
     [self.tableView reloadData];
 }

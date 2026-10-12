@@ -38,6 +38,7 @@
 #import "FindPhone.h"
 #import "LanguageCards.h"
 #import "PixelAnim.h"
+#import "ClipboardRelay.h"
 #if TIO_IMAGE_RX_LAB
 #import "ImageUploadUI.h"
 #if TIO_DISPLAY_PHONE
