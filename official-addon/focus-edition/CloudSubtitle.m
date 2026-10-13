@@ -7,6 +7,7 @@
 #import "Core.h"
 #import "MusicBridge.h"
 #import "ResearchUI.h"
+#import "ProtocolContext.h"
 #import <AVFoundation/AVFoundation.h>
 #import <Security/Security.h>
 
@@ -51,9 +52,13 @@ static void SubtitleLogAdd(NSString *line){
 // ---- 推一行到眼镜（音乐页通道，持续显示；调用方负责停） ----
 static void ShowLineOnGlasses(NSString *text){
     if(!text.length)return;
+    NSString *device=TIOProtocolDevice();
+    if(!device.length){SubtitleState=@"推镜失败：眼镜未连接，请先连接眼镜";return;}
     TMMusicBridge *bridge=[TMMusicBridge shared];
     if(bridge.failed)[bridge reset];
     [bridge openWithCover:nil lyrics:@[@{@"ms":@0,@"text":text}]];
+    if(bridge.failed)SubtitleState=[NSString stringWithFormat:@"推镜失败：%@",bridge.note];
+    else SubtitleState=bridge.note?:@"已推镜，等待眼镜确认…";
     SubtitleLogAdd([NSString stringWithFormat:@"推镜：%@",text]);
 }
 
